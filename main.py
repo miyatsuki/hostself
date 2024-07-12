@@ -83,7 +83,7 @@ completion = client.chat.completions.create(
     ],
 )
 
-diff = completion.choices[0].message.content
+diff_str = completion.choices[0].message.content
 
 # Generate merging prompt
 merge_prompt = f"""
@@ -98,7 +98,7 @@ merge_prompt = f"""
 {code_prompt}
 
 #### 変更後
-{diff}
+{diff_str}
 """.strip()
 
 # Get merged code from OpenAI
@@ -130,7 +130,7 @@ class Diff(BaseModel):
     commit_message: str
 
 
-diff: Diff = marvin.cast(diff, target=Diff)
+diff: Diff = marvin.cast(diff_str, target=Diff)
 
 # Create new branch
 branch_name = f"ai/fix/issue-{issue_no}"
