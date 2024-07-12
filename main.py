@@ -116,9 +116,18 @@ for file in pr.files:
     with open(os.path.join(tmp_dir, file.name), "w") as f:
         f.write(file.text)
 
+# Write requirements.txt to the repository
+with open(os.path.join(tmp_dir, 'requirements.txt'), 'w') as f:
+    f.write('''
+marvin==<適切なバージョン>
+python-dotenv==<適切なバージョン>
+openai==<適切なバージョン>
+pydantic==<適切なバージョン>
+''')
+
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
+os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"")
 os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 
 # PR description
