@@ -1,17 +1,23 @@
 import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 
 import marvin
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
+client = OpenAI()
+marvin.settings.openai.api_key = dotenv_values(".env")["OPENAI_API_KEY"]
 
-_, repository_name, issue = sys.argv
+_, issue_url = sys.argv
+# https://github.com/[org_name]/[repository_name]/issues/[issue_no]
+issue_no = issue_url.split("/")[-1]
+repository_name = "/".join(issue_url.split("/")[-4:-2])
 
 # Clone repository under temporary directory
 tmp_dir = "tmp"
@@ -26,22 +32,30 @@ os.system(f"cd {tmp_dir} && git checkout main")
 # Pull latest changes
 os.system(f"cd {tmp_dir} && git fetch -p && git pull")
 
-# Context files to read
-contexts = ["calc.py"]  # Add more files if needed
+# Get issue details
+issue_str = os.popen(f"gh issue view {issue_no} --json title,body").read()
 
-# Issue to be fixed
-issue = "divideが0の時はraiseしてほしい。また、それを確認するようなunittestが欲しい"
+
+class Issue(BaseModel):
+    title: str
+    body: str
+    related_files: str
+
+
+issue = marvin.cast(issue_str, target=Issue)
 
 # Read and format context files
-codes = [(context, open(f"{tmp_dir}/{context}").read()) for context in contexts]
+codes = [
+    (file_path, open(f"{tmp_dir}/{file_path}").read())
+    for file_path in issue.related_files.split(",")
+]
 code_prompt = ""
-for context, code in codes:
-    code_prompt += f"```{context}\n"
+for file_path, code in codes:
+    code_prompt += f"```{file_path}\n"
     code_prompt += code
     code_prompt += "```"
 
 code_prompt = code_prompt.strip()
-print(code_prompt)
 
 # Generate prompt for AI
 prompt = f"""
@@ -49,18 +63,15 @@ prompt = f"""
 新しいファイルが必要であれば、そのファイルを作成してください。
 
 ### 課題
-{issue}
+{issue_str}
 
 ### 既存のコード
 {code_prompt}
 """.strip()
 
-print(prompt)
-
 # Get completion from OpenAI
-client = OpenAI()
 completion = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-4o",
     messages=[
         {"role": "system", "content": "You are a smart AI programmer."},
         {"role": "user", "content": prompt},
@@ -68,14 +79,13 @@ completion = client.chat.completions.create(
 )
 
 diff = completion.choices[0].message.content
-print(diff)
 
 # Generate merging prompt
 merge_prompt = f"""
 変更後のコードと変更前のコードをマージしてください。
 
 #### この修正で解決される課題
-{issue}
+{issue_str}
 
 #### 変更前
 {code_prompt}
@@ -86,14 +96,13 @@ merge_prompt = f"""
 
 # Get merged code from OpenAI
 completion = client.chat.completions.create(
-    model="gpt-4",
+    model="gpt-4o",
     messages=[
-        {"role": "system", "content": "You are a smart code marger."},
+        {"role": "system", "content": "You are a smart code merger."},
         {"role": "user", "content": merge_prompt},
     ],
 )
 merged = completion.choices[0].message.content
-print(merged)
 
 
 # Pydantic models
@@ -112,8 +121,6 @@ class PullRequest(BaseModel):
 # Parse merged code into a PullRequest object
 pr = marvin.cast(merged, target=PullRequest)
 
-print(pr)
-
 # Create new branch
 os.system(f"cd {tmp_dir} && git checkout -b ai/{pr.branch_name}")
 
@@ -130,12 +137,16 @@ os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 # PR description
 pr_description = f"""
 #### 解決したかった課題
-{issue}
+{issue.title}
 
 #### AIによる説明
 {pr.description}
 """
+
 # Create pull request
-os.system(
-    f"cd {tmp_dir} && gh pr create --base main --head ai/{pr.branch_name} --title '{pr.title}' --body '{pr_description}'"
-)
+with tempfile.NamedTemporaryFile(mode="w") as f:
+    f.write(pr_description)
+    pr_description_file = f.name
+    cmd = f"gh pr create --base main --head 'ai/{pr.branch_name}' --title '{pr.title}' --body-file {pr_description_file}"
+
+os.system(cmd)
