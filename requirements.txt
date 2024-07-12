@@ -1,0 +1,4 @@
+openai
+marvin
+python-dotenv
+pydantic
