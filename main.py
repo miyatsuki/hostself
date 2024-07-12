@@ -4,6 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+import anthropic
 import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
 from openai import OpenAI
@@ -60,9 +61,12 @@ code_prompt = code_prompt.strip()
 # Generate prompt for AI
 prompt = f"""
 課題を解決するように既存のコードを修正してください。
+ー 関係する部分だけを出力し、関係ない部分は省略してください
 ー 新しいファイルが必要であれば、そのファイルを作成してください。
 ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
 ー 課題に関係ない箇所は一切触らないでください。
+
+また、修正内容の説明と、それを1行でまとめたコミットメッセージを示してください
 
 ### 課題
 {issue_str}
@@ -72,6 +76,7 @@ prompt = f"""
 """.strip()
 
 # Get completion from OpenAI
+"""
 completion = client.chat.completions.create(
     model="gpt-4o",
     messages=[
@@ -82,13 +87,20 @@ completion = client.chat.completions.create(
         {"role": "user", "content": prompt},
     ],
 )
+"""
 
-diff_str = completion.choices[0].message.content
+response = anthropic.Anthropic().messages.create(
+    model="claude-3-5-sonnet-20240620",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": prompt}],
+)
+
+diff_str = response.content[0].text
 
 # Generate merging prompt
 merge_prompt = f"""
 変更後のコードと変更前のコードをマージしてください。
-ー 可能な限り少ない変更量でマージしてください。
+ー コード全体を出力してください
 ー 入力された変更点以外のリファクタリングを行ってはいけません。
 
 #### この修正で解決される課題
@@ -102,6 +114,7 @@ merge_prompt = f"""
 """.strip()
 
 # Get merged code from OpenAI
+"""
 completion = client.chat.completions.create(
     model="gpt-4o",
     messages=[
@@ -113,6 +126,14 @@ completion = client.chat.completions.create(
     ],
 )
 merged = completion.choices[0].message.content
+"""
+
+response = anthropic.Anthropic().messages.create(
+    model="claude-3-5-sonnet-20240620",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": merge_prompt}],
+)
+merged = response.content[0].text
 
 
 # Pydantic models
