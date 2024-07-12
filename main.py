@@ -53,7 +53,9 @@ code_prompt = ""
 for file_path, code in codes:
     code_prompt += f"```{file_path}\n"
     code_prompt += code
-    code_prompt += "```\n\n"
+    code_prompt += "```
+
+"
 
 code_prompt = code_prompt.strip()
 
@@ -129,8 +131,11 @@ class Diff(BaseModel):
     description: str
     commit_message: str
 
+try:
+    diff: Diff = marvin.cast(diff, target=Diff)
+except Exception as e:
+    diff = Diff(description="AI修正の詳細が取得できませんでした。", commit_message="AI 自動修正")
 
-diff: Diff = marvin.cast(diff, target=Diff)
 
 # Create new branch
 branch_name = f"ai/fix/issue-{issue_no}"
@@ -144,7 +149,7 @@ for file in files:
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
 os.system(
-    f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no} , {diff.commit_message}"'
+    f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no} , {diff.commit_message}"
 )
 os.system(f"cd {tmp_dir} && git push origin {branch_name}")
 
