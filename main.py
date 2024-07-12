@@ -53,7 +53,9 @@ code_prompt = ""
 for file_path, code in codes:
     code_prompt += f"```{file_path}\n"
     code_prompt += code
-    code_prompt += "```\n\n"
+    code_prompt += "```
+
+"
 
 code_prompt = code_prompt.strip()
 
@@ -107,60 +109,4 @@ completion = client.chat.completions.create(
     messages=[
         {
             "role": "system",
-            "content": "You are a smart code merger. You ONLY care about merging code. You must not care about general refactoring.",
-        },
-        {"role": "user", "content": merge_prompt},
-    ],
-)
-merged = completion.choices[0].message.content
-
-
-# Pydantic models
-class File(BaseModel):
-    name: str
-    body: str
-
-
-# Parse merged code into a PullRequest object
-files: list[File] = marvin.cast(merged, target=list[File])
-
-
-class Diff(BaseModel):
-    description: str
-    commit_message: str
-
-
-diff: Diff = marvin.cast(diff_str, target=Diff)
-
-# Create new branch
-branch_name = f"ai/fix/issue-{issue_no}"
-os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
-
-# Write files to the repository
-for file in files:
-    with open(os.path.join(tmp_dir, file.name), "w") as f:
-        f.write(file.body)
-
-# Git add, commit and push
-os.system(f"cd {tmp_dir} && git add .")
-os.system(
-    f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no} , {diff.commit_message}"'
-)
-os.system(f"cd {tmp_dir} && git push origin {branch_name}")
-
-# PR description
-pr_description = f"""
-#### 解決したかった課題
-{issue.title}
-#{issue_no}
-
-#### AIによる説明
-{diff.description}
-"""
-
-# Create pull request
-with tempfile.NamedTemporaryFile(mode="w") as f:
-    f.write(pr_description)
-    pr_description_file = f.name
-    cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {pr_description_file}"
-    os.system(cmd)
+            "content": "You are a smart code merger. You ONLY care about merging code. You must not care about general refactoring
