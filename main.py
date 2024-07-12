@@ -1,34 +1,44 @@
-# %%
+import os
+import shutil
+import tempfile
+from pydantic import BaseModel
 from dotenv import load_dotenv
+import marvin
 from openai import OpenAI
 
+# Load environment variables
 load_dotenv()
 
-# %%
+# Clone repository under temporary directory
+tmp_dir = tempfile.mkdtemp()
+repository_name = "your_repo_name_here"  # Change this to your repository's name
+os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
 
+# Checkout main branch
+os.system(f"cd {tmp_dir} && git checkout main")
 
-# %%
-# git pull
-os.system(f"cd {tmp_dir} && git checkout main && git fetch -p && git pull")
+# Pull latest changes
+os.system(f"cd {tmp_dir} && git fetch -p && git pull")
 
-# %%
-contexts = ["calc.py"]
+# Context files to read
+contexts = ["calc.py"]  # Add more files if needed
 
-# %%
+# Issue to be fixed
 issue = "divideが0の時はraiseしてほしい。また、それを確認するようなunittestが欲しい"
 
-# %%
+# Read and format context files
 codes = [(context, open(f"{tmp_dir}/{context}").read()) for context in contexts]
-
 code_prompt = ""
 for context, code in codes:
     code_prompt += f"```{context}\n"
     code_prompt += code
-    code_prompt += "```\n\n"
+    code_prompt += "```
+
+"
 code_prompt = code_prompt.strip()
 print(code_prompt)
 
-# %%
+# Generate prompt for AI
 prompt = f"""
 課題を解決するように既存のコードを修正してください。
 新しいファイルが必要であれば、そのファイルを作成してください。
@@ -40,26 +50,23 @@ prompt = f"""
 {code_prompt}
 """.strip()
 
-# %%
 print(prompt)
 
-# %%
+# Get completion from OpenAI
 client = OpenAI()
 completion = client.chat.completions.create(
-    model="gpt-4o",
+    model="gpt-4",
     messages=[
         {"role": "system", "content": "You are a smart AI programmer."},
         {"role": "user", "content": prompt},
     ],
 )
 
-print(completion.choices[0].message.content)
-
-# %%
 diff = completion.choices[0].message.content
+print(diff)
 
-# %%
-prompt = f"""
+# Generate merging prompt
+merge_prompt = f"""
 変更後のコードと変更前のコードをマージしてください。
 
 #### この修正で解決される課題
@@ -72,29 +79,21 @@ prompt = f"""
 {diff}
 """.strip()
 
-# %%
-client = OpenAI()
+# Get merged code from OpenAI
 completion = client.chat.completions.create(
-    model="gpt-4o",
+    model="gpt-4",
     messages=[
         {"role": "system", "content": "You are a smart code marger."},
-        {"role": "user", "content": prompt},
+        {"role": "user", "content": merge_prompt},
     ],
 )
-
-# %%
 merged = completion.choices[0].message.content
 print(merged)
 
-# %%
-import marvin
-from pydantic import BaseModel
-
-
+# Pydantic models
 class File(BaseModel):
     name: str
     text: str
-
 
 class PullRequest(BaseModel):
     branch_name: str
@@ -102,52 +101,25 @@ class PullRequest(BaseModel):
     description: str
     files: list[File]
 
-
+# Parse merged code into a PullRequest object
 pr = marvin.cast(merged, target=PullRequest)
 
-# %%
 print(pr)
 
-# %%
-# clone repository under tmp dir
-import os
-import shutil
-import tempfile
-
-tmp_dir = tempfile.mkdtemp()
-os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
-
-# %%
-# main をチェックアウト
-os.system(f"cd {tmp_dir} && git checkout main")
-
-# %%
-# ブランチを作成
-# ブランチ名は feature/ai/merge-code
+# Create new branch
 os.system(f"cd {tmp_dir} && git checkout -b ai/{pr.branch_name}")
 
-# %%
+# Write files to the repository
 for file in pr.files:
     with open(os.path.join(tmp_dir, file.name), "w") as f:
         f.write(file.text)
 
-# %%
-# git add
+# Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-
-# %%
-# git status
-os.system(f"cd {tmp_dir} && git status")
-
-# %%
-# git commit
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
-
-# %%
-# git push
+os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"")
 os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 
-# %%
+# PR description
 pr_description = f"""
 #### 解決したかった課題
 {issue}
@@ -155,11 +127,7 @@ pr_description = f"""
 #### AIによる説明
 {pr.description}
 """
-
-# %%
-# create pr
+# Create pull request
 os.system(
     f"cd {tmp_dir} && gh pr create --base main --head ai/{pr.branch_name} --title '{pr.title}' --body '{pr_description}'"
 )
-
-# %%
