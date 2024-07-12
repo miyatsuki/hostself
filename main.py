@@ -53,7 +53,7 @@ code_prompt = ""
 for file_path, code in codes:
     code_prompt += f"```{file_path}\n"
     code_prompt += code
-    code_prompt += "```"
+    code_prompt += "```\n\n"
 
 code_prompt = code_prompt.strip()
 
