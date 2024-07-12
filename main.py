@@ -60,7 +60,9 @@ code_prompt = code_prompt.strip()
 # Generate prompt for AI
 prompt = f"""
 課題を解決するように既存のコードを修正してください。
-新しいファイルが必要であれば、そのファイルを作成してください。
+ー 新しいファイルが必要であれば、そのファイルを作成してください。
+ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
+ー 課題に関係ない箇所は一切触らないでください。
 
 ### 課題
 {issue_str}
@@ -73,7 +75,10 @@ prompt = f"""
 completion = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-        {"role": "system", "content": "You are a smart AI programmer."},
+        {
+            "role": "system",
+            "content": "You are a smart AI programmer. You are ONLY intereseted to solve issues. You must not care about general refactoring",
+        },
         {"role": "user", "content": prompt},
     ],
 )
@@ -83,6 +88,8 @@ diff = completion.choices[0].message.content
 # Generate merging prompt
 merge_prompt = f"""
 変更後のコードと変更前のコードをマージしてください。
+ー 可能な限り少ない変更量でマージしてください。
+ー 入力された変更点以外のリファクタリングを行ってはいけません。
 
 #### この修正で解決される課題
 {issue_str}
@@ -98,7 +105,10 @@ merge_prompt = f"""
 completion = client.chat.completions.create(
     model="gpt-4o",
     messages=[
-        {"role": "system", "content": "You are a smart code merger."},
+        {
+            "role": "system",
+            "content": "You are a smart code merger. You ONLY care about merging code. You must not care about general refactoring.",
+        },
         {"role": "user", "content": merge_prompt},
     ],
 )
@@ -108,31 +118,35 @@ merged = completion.choices[0].message.content
 # Pydantic models
 class File(BaseModel):
     name: str
-    text: str
-
-
-class PullRequest(BaseModel):
-    branch_name: str
-    title: str
-    description: str
-    files: list[File]
+    body: str
 
 
 # Parse merged code into a PullRequest object
-pr = marvin.cast(merged, target=PullRequest)
+files = marvin.cast(merged, target=list[File])
+
+
+class Diff(BaseModel):
+    diff: str
+    commit_message: str
+
+
+diff = marvin.cast(diff, target=Diff)
 
 # Create new branch
-os.system(f"cd {tmp_dir} && git checkout -b ai/{pr.branch_name}")
+branch_name = f"ai/fix/issue-{issue_no}"
+os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
 
 # Write files to the repository
-for file in pr.files:
+for file in files:
     with open(os.path.join(tmp_dir, file.name), "w") as f:
         f.write(file.text)
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
-os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
+os.system(
+    f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no} , {diff.commit_message}"'
+)
+os.system(f"cd {tmp_dir} && git push origin {branch_name}")
 
 # PR description
 pr_description = f"""
@@ -140,13 +154,13 @@ pr_description = f"""
 {issue.title}
 
 #### AIによる説明
-{pr.description}
+{diff.description}
 """
 
 # Create pull request
 with tempfile.NamedTemporaryFile(mode="w") as f:
     f.write(pr_description)
     pr_description_file = f.name
-    cmd = f"gh pr create --base main --head 'ai/{pr.branch_name}' --title '{pr.title}' --body-file {pr_description_file}"
+    cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {pr_description_file}"
 
 os.system(cmd)
