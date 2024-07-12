@@ -126,11 +126,11 @@ files: list[File] = marvin.cast(merged, target=list[File])
 
 
 class Diff(BaseModel):
-    diff: str
+    description: str
     commit_message: str
 
 
-diff = marvin.cast(diff, target=Diff)
+diff: Diff = marvin.cast(diff, target=Diff)
 
 # Create new branch
 branch_name = f"ai/fix/issue-{issue_no}"
@@ -152,6 +152,7 @@ os.system(f"cd {tmp_dir} && git push origin {branch_name}")
 pr_description = f"""
 #### 解決したかった課題
 {issue.title}
+#{issue_no}
 
 #### AIによる説明
 {diff.description}
