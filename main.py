@@ -20,9 +20,9 @@ issue_no = issue_url.split("/")[-1]
 repository_name = "/".join(issue_url.split("/")[-4:-2])
 
 # Clone repository under temporary directory
-tmp_dir = "tmp"
+tmp_dir = f"tmp/{repository_name}"
 shutil.rmtree(tmp_dir, ignore_errors=True)
-Path(tmp_dir).mkdir()
+Path(tmp_dir).mkdir(parents=True)
 
 os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
 
@@ -131,7 +131,7 @@ for file in pr.files:
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
+os.system(f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no}, {pr.title}"')
 os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 
 # PR description
@@ -148,5 +148,4 @@ with tempfile.NamedTemporaryFile(mode="w") as f:
     f.write(pr_description)
     pr_description_file = f.name
     cmd = f"gh pr create --base main --head 'ai/{pr.branch_name}' --title '{pr.title}' --body-file {pr_description_file}"
-
-os.system(cmd)
+    os.system(cmd)
