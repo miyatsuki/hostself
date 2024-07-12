@@ -1,5 +1,7 @@
 import os
-import tempfile
+import shutil
+import sys
+from pathlib import Path
 
 import marvin
 from dotenv import load_dotenv
@@ -9,9 +11,13 @@ from pydantic import BaseModel
 # Load environment variables
 load_dotenv()
 
+_, repository_name, issue = sys.argv
+
 # Clone repository under temporary directory
-tmp_dir = tempfile.mkdtemp()
-repository_name = "your_repo_name_here"  # Change this to your repository's name
+tmp_dir = "tmp"
+shutil.rmtree(tmp_dir, ignore_errors=True)
+Path(tmp_dir).mkdir()
+
 os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
 
 # Checkout main branch
