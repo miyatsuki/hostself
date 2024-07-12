@@ -1,10 +1,10 @@
 import os
-import shutil
 import tempfile
-from pydantic import BaseModel
-from dotenv import load_dotenv
+
 import marvin
+from dotenv import load_dotenv
 from openai import OpenAI
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -32,9 +32,8 @@ code_prompt = ""
 for context, code in codes:
     code_prompt += f"```{context}\n"
     code_prompt += code
-    code_prompt += "```
+    code_prompt += "```"
 
-"
 code_prompt = code_prompt.strip()
 print(code_prompt)
 
@@ -90,16 +89,19 @@ completion = client.chat.completions.create(
 merged = completion.choices[0].message.content
 print(merged)
 
+
 # Pydantic models
 class File(BaseModel):
     name: str
     text: str
+
 
 class PullRequest(BaseModel):
     branch_name: str
     title: str
     description: str
     files: list[File]
+
 
 # Parse merged code into a PullRequest object
 pr = marvin.cast(merged, target=PullRequest)
@@ -116,7 +118,7 @@ for file in pr.files:
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"")
+os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
 os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 
 # PR description
