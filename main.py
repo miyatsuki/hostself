@@ -53,7 +53,8 @@ code_prompt = ""
 for file_path, code in codes:
     code_prompt += f"```{file_path}\n"
     code_prompt += code
-    code_prompt += "```"
+    code_prompt += "```
+"
 
 code_prompt = code_prompt.strip()
 
@@ -131,7 +132,7 @@ for file in pr.files:
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"')
+os.system(f'cd {tmp_dir} && git commit -m "AI: {pr.title}"")
 os.system(f"cd {tmp_dir} && git push origin ai/{pr.branch_name}")
 
 # PR description
