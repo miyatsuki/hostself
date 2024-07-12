@@ -1,7 +1,6 @@
 import os
 import shutil
 import sys
-import tempfile
 from pathlib import Path
 
 import anthropic
@@ -180,8 +179,9 @@ pr_description = f"""
 """
 
 # Create pull request
-with tempfile.NamedTemporaryFile(mode="w") as f:
+file_name = f"{tmp_dir}/pr_description.md"
+with open(file_name, "w") as f:
     f.write(pr_description)
-    pr_description_file = f.name
-    cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {pr_description_file}"
-    os.system(cmd)
+
+cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_name}"
+os.system(cmd)
