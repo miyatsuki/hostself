@@ -4,7 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import marvin
+import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
 from openai import OpenAI
 from pydantic import BaseModel
@@ -122,7 +122,7 @@ class File(BaseModel):
 
 
 # Parse merged code into a PullRequest object
-files = marvin.cast(merged, target=list[File])
+files: list[File] = marvin.cast(merged, target=list[File])
 
 
 class Diff(BaseModel):
@@ -139,7 +139,7 @@ os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
 # Write files to the repository
 for file in files:
     with open(os.path.join(tmp_dir, file.name), "w") as f:
-        f.write(file.text)
+        f.write(file.body)
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
