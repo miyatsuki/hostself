@@ -1,11 +1,14 @@
 import os
 import shutil
 import sys
+from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 
-import anthropic
+import anthropic  # type: ignore
 import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
+from miyatsuki_tools.llm_openai import parse_json  # type: ignore
 from openai import OpenAI
 from pydantic import BaseModel
 
@@ -33,20 +36,49 @@ os.system(f"cd {tmp_dir} && git checkout main")
 os.system(f"cd {tmp_dir} && git fetch -p && git pull")
 
 # Get issue details
-issue_str = os.popen(f"gh issue view {issue_no} --json title,body").read()
+issue_str = os.popen(
+    f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
+).read()
+
+prompt = f"""
+入力を以下のフォーマットにしてください
+### 入力
+{issue_str}
+
+### フォーマット
+```json
+{{
+    "title": str,
+    "body": str,
+    "related_files": str
+}}
+```
+"""
+
+response = anthropic.Anthropic().messages.create(
+    model="claude-3-5-sonnet-20240620",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": prompt}],
+)
 
 
-class Issue(BaseModel):
+@dataclass(frozen=True)
+class Issue:
     title: str
     body: str
     related_files: str
 
+    @classmethod
+    def from_json_str(cls, json_str: str) -> "Issue":
+        return cls(**parse_json(json_str))
 
-issue = marvin.cast(issue_str, target=Issue)
+
+issue = Issue.from_json_str(response.content[0].text)
+
 
 # Read and format context files
 codes = [
-    (file_path, open(f"{tmp_dir}/{file_path}").read())
+    (file_path, open(f"{tmp_dir}/{file_path.strip()}").read())
     for file_path in issue.related_files.split(",")
 ]
 code_prompt = ""
@@ -65,7 +97,7 @@ prompt = f"""
 ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
 ー 課題に関係ない箇所は一切触らないでください。
 
-また、修正内容の説明と、それを1行でまとめたコミットメッセージを示してください
+また、修正内容の説明を示してください
 
 ### 課題
 {issue_str}
@@ -73,20 +105,6 @@ prompt = f"""
 ### 既存のコード
 {code_prompt}
 """.strip()
-
-# Get completion from OpenAI
-"""
-completion = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {
-            "role": "system",
-            "content": "You are a smart AI programmer. You are ONLY intereseted to solve issues. You must not care about general refactoring",
-        },
-        {"role": "user", "content": prompt},
-    ],
-)
-"""
 
 response = anthropic.Anthropic().messages.create(
     model="claude-3-5-sonnet-20240620",
@@ -112,20 +130,6 @@ merge_prompt = f"""
 {diff_str}
 """.strip()
 
-# Get merged code from OpenAI
-"""
-completion = client.chat.completions.create(
-    model="gpt-4o",
-    messages=[
-        {
-            "role": "system",
-            "content": "You are a smart code merger. You ONLY care about merging code. You must not care about general refactoring.",
-        },
-        {"role": "user", "content": merge_prompt},
-    ],
-)
-merged = completion.choices[0].message.content
-"""
 
 response = anthropic.Anthropic().messages.create(
     model="claude-3-5-sonnet-20240620",
@@ -145,12 +149,48 @@ class File(BaseModel):
 files: list[File] = marvin.cast(merged, target=list[File])
 
 
-class Diff(BaseModel):
-    description: str
+prompt = f"""
+入力を以下のフォーマットにしてください
+### 入力
+{diff_str}
+
+### フォーマット
+```json
+{{
+    "summary": str, # 変更内容を要約したもの
+    "commit_message": str, # 変更内容を一行で表したコミットメッセージ
+}}
+```
+"""
+
+
+@dataclass(frozen=True)
+class Diff:
+    summary: str
     commit_message: str
 
+    @classmethod
+    def from_json_str(cls, json_str: str) -> "Diff":
+        return cls(**parse_json(json_str))
 
-diff: Diff = marvin.cast(diff_str, target=Diff)
+
+try:
+    response = anthropic.Anthropic().messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    diff = Diff.from_json_str(response.content[0].text)
+except JSONDecodeError as e:
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[{"role": "user", "content": prompt}],
+        response_format={"type": "json_object"},
+    )
+    content = response.choices[0].message.content
+    assert content is not None
+    diff = Diff.from_json_str(content)
+
 
 # Create new branch
 branch_name = f"ai/fix/issue-{issue_no}"
@@ -163,25 +203,23 @@ for file in files:
 
 # Git add, commit and push
 os.system(f"cd {tmp_dir} && git add .")
-os.system(
-    f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no} , {diff.commit_message}"'
-)
+os.system(f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"')
 os.system(f"cd {tmp_dir} && git push origin {branch_name}")
 
 # PR description
 pr_description = f"""
-#### 解決したかった課題
-{issue.title}
-#{issue_no}
+### 解決したかった課題
+#{issue_no} {issue.title}
 
-#### AIによる説明
-{diff.description}
+### AIによる説明
+{diff.summary}
 """
 
 # Create pull request
 file_name = f"{tmp_dir}/pr_description.md"
 with open(file_name, "w") as f:
     f.write(pr_description)
+file_relative_path = Path(file_name).name
 
-cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_name}"
+cmd = f"cd {tmp_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
 os.system(cmd)
