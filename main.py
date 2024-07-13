@@ -8,7 +8,7 @@ from pathlib import Path
 import anthropic  # type: ignore
 import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
-from miyatsuki_tools.llm_openai import parse_json  # type: ignore
+from miyatsuki_tools.llm import hypercast  # type: ignore
 from openai import OpenAI
 
 # Load environment variables
@@ -39,27 +39,6 @@ issue_str = os.popen(
     f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
 ).read()
 
-prompt = f"""
-入力を以下のフォーマットにしてください
-### 入力
-{issue_str}
-
-### フォーマット
-```json
-{{
-    "title": str,
-    "body": str,
-    "related_files": str
-}}
-```
-"""
-
-response = anthropic.Anthropic().messages.create(
-    model="claude-3-5-sonnet-20240620",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": prompt}],
-)
-
 
 @dataclass(frozen=True)
 class Issue:
@@ -67,12 +46,8 @@ class Issue:
     body: str
     related_files: str
 
-    @classmethod
-    def from_json_str(cls, json_str: str) -> "Issue":
-        return cls(**parse_json(json_str))
 
-
-issue = Issue.from_json_str(response.content[0].text)
+issue = hypercast(cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620")
 
 
 # Read and format context files
@@ -164,47 +139,29 @@ class File:
 files: list[File] = marvin.cast(merged, target=list[File])
 
 
-prompt = f"""
-入力を以下のフォーマットにしてください
-### 入力
-{diff_str}
-
-### フォーマット
-```json
-{{
-    "summary": str, # 変更内容を要約したもの(日本語)
-    "commit_message": str, # 変更内容を一行で表したコミットメッセージ(日本語)
-}}
-```
-"""
-
-
 @dataclass(frozen=True)
 class Diff:
+    """
+    Represents a difference between two versions of a file.
+
+    Attributes:
+        summary (str): 差分の要約
+        commit_message (str): 差分を一言で表すメッセージ。Conventional Commitsのフォーマットに従うこと。
+    """
+
     summary: str
     commit_message: str
 
-    @classmethod
-    def from_json_str(cls, json_str: str) -> "Diff":
-        return cls(**parse_json(json_str))
-
 
 try:
-    response = anthropic.Anthropic().messages.create(
+    diff = hypercast(
+        cls=Diff,
+        input_str=diff_str,
         model="claude-3-5-sonnet-20240620",
-        max_tokens=2048,
-        messages=[{"role": "user", "content": prompt}],
+        llm_options={"max_tokens": 2048},
     )
-    diff = Diff.from_json_str(response.content[0].text)
 except JSONDecodeError as e:
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[{"role": "user", "content": prompt}],
-        response_format={"type": "json_object"},
-    )
-    content = response.choices[0].message.content
-    assert content is not None
-    diff = Diff.from_json_str(content)
+    diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
 
 
 # Create new branch
