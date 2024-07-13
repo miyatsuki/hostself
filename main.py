@@ -10,7 +10,6 @@ import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
 from miyatsuki_tools.llm_openai import parse_json  # type: ignore
 from openai import OpenAI
-from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv()
@@ -104,6 +103,15 @@ prompt = f"""
 
 ### 既存のコード
 {code_prompt}
+
+### 出力フォーマット
+```json
+{{
+    "file_path": str, # 修正したファイルのフルパス
+    "diff": str, # 修正後のコードの差分
+    "summary": str, # 修正内容を要約したもの(日本語)
+}}[]
+```
 """.strip()
 
 response = anthropic.Anthropic().messages.create(
@@ -128,20 +136,27 @@ merge_prompt = f"""
 
 #### 変更後
 {diff_str}
+
+### 出力フォーマット
+```json
+{{
+    "path": str, # ファイルのフルパス
+    "body": str, # マージしたコード
+}}[]
 """.strip()
 
 
 response = anthropic.Anthropic().messages.create(
     model="claude-3-5-sonnet-20240620",
-    max_tokens=1024,
+    max_tokens=2048,
     messages=[{"role": "user", "content": merge_prompt}],
 )
 merged = response.content[0].text
 
 
-# Pydantic models
-class File(BaseModel):
-    name: str
+@dataclass(frozen=True)
+class File:
+    path: str
     body: str
 
 
@@ -157,8 +172,8 @@ prompt = f"""
 ### フォーマット
 ```json
 {{
-    "summary": str, # 変更内容を要約したもの
-    "commit_message": str, # 変更内容を一行で表したコミットメッセージ
+    "summary": str, # 変更内容を要約したもの(日本語)
+    "commit_message": str, # 変更内容を一行で表したコミットメッセージ(日本語)
 }}
 ```
 """
@@ -177,7 +192,7 @@ class Diff:
 try:
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=1024,
+        max_tokens=2048,
         messages=[{"role": "user", "content": prompt}],
     )
     diff = Diff.from_json_str(response.content[0].text)
@@ -198,7 +213,7 @@ os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
 
 # Write files to the repository
 for file in files:
-    with open(os.path.join(tmp_dir, file.name), "w") as f:
+    with open(os.path.join(tmp_dir, file.path), "w") as f:
         f.write(file.body)
 
 # Git add, commit and push
