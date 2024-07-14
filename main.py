@@ -221,6 +221,9 @@ def main():
 
     # Write files to the repository
     for file in files:
+        if not (work_dir / file.path).parent.exists():
+            (work_dir / file.path).parent.mkdir(parents=True)
+
         with open(work_dir / file.path, "w") as f:
             f.write(file.body)
 
