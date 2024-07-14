@@ -1,6 +1,7 @@
 import os
 import shutil
 import sys
+import argparse
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -44,155 +45,138 @@ load_dotenv()
 client = OpenAI()
 marvin.settings.openai.api_key = dotenv_values(".env")["OPENAI_API_KEY"]
 
-_, issue_url = sys.argv
-# https://github.com/[org_name]/[repository_name]/issues/[issue_no]
-issue_no = issue_url.split("/")[-1]
-repository_name = "/".join(issue_url.split("/")[-4:-2])
+def remote_mode(issue_url):
+    # https://github.com/[org_name]/[repository_name]/issues/[issue_no]
+    issue_no = issue_url.split("/")[-1]
+    repository_name = "/".join(issue_url.split("/")[-4:-2])
 
-# Clone repository under temporary directory
-tmp_dir = f"tmp/{repository_name}"
-shutil.rmtree(tmp_dir, ignore_errors=True)
-Path(tmp_dir).mkdir(parents=True)
+    # Clone repository under temporary directory
+    tmp_dir = f"tmp/{repository_name}"
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    Path(tmp_dir).mkdir(parents=True)
 
-os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
+    os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
 
-# Checkout main branch
-os.system(f"cd {tmp_dir} && git checkout main")
+    # Checkout main branch
+    os.system(f"cd {tmp_dir} && git checkout main")
 
-# Pull latest changes
-os.system(f"cd {tmp_dir} && git fetch -p && git pull")
+    # Pull latest changes
+    os.system(f"cd {tmp_dir} && git fetch -p && git pull")
 
-# Get issue details
-issue_str = os.popen(
-    f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
-).read()
+    # Get issue details
+    issue_str = os.popen(
+        f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
+    ).read()
 
+    return tmp_dir, issue_no, issue_str
 
-issue = hypercast(cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620")
+def local_mode(repository, issue_no):
+    tmp_dir = repository
+    issue_file = Path(tmp_dir) / ".ai" / f"{issue_no}.txt"
+    
+    if not issue_file.exists():
+        print(f"Error: Issue file {issue_file} not found.")
+        sys.exit(1)
+    
+    with open(issue_file, "r") as f:
+        issue_str = f.read()
+    
+    return tmp_dir, issue_no, issue_str
 
+def main():
+    parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
+    parser.add_argument("--remote", action="store_true", help="Run in remote mode")
+    parser.add_argument("repository", nargs="?", help="Repository path (for local mode)")
+    parser.add_argument("issue_no", nargs="?", help="Issue number (for local mode)")
+    args = parser.parse_args()
 
-# Read and format context files
-codes = [
-    (file_path, open(f"{tmp_dir}/{file_path.strip()}").read())
-    for file_path in issue.related_files.split(",")
-]
-code_prompt = ""
-for file_path, code in codes:
-    code_prompt += f"```{file_path}\n"
-    code_prompt += code
-    code_prompt += "```\n\n"
+    if args.remote:
+        if len(sys.argv) != 3:
+            print("Error: In remote mode, please provide the issue URL as an argument.")
+            sys.exit(1)
+        tmp_dir, issue_no, issue_str = remote_mode(sys.argv[2])
+    else:
+        if not args.repository or not args.issue_no:
+            print("Error: In local mode, please provide both repository path and issue number.")
+            sys.exit(1)
+        tmp_dir, issue_no, issue_str = local_mode(args.repository, args.issue_no)
 
-code_prompt = code_prompt.strip()
+    issue = hypercast(cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620")
 
-# Generate prompt for AI
-prompt = f"""
-課題を解決するように既存のコードを修正してください。
-ー 関係する部分だけを出力し、関係ない部分は省略してください
-ー 新しいファイルが必要であれば、そのファイルを作成してください。
-ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
-ー 課題に関係ない箇所は一切触らないでください。
+    # Read and format context files
+    codes = [
+        (file_path, open(f"{tmp_dir}/{file_path.strip()}").read())
+        for file_path in issue.related_files.split(",")
+    ]
+    code_prompt = ""
+    for file_path, code in codes:
+        code_prompt += f"```{file_path}\n"
+        code_prompt += code
+        code_prompt += "```\n\n"
 
-また、修正内容の説明を示してください
+    code_prompt = code_prompt.strip()
 
-### 課題
-{issue_str}
+    # Generate prompt for AI
+    prompt = f"""
+    課題を解決するように既存のコードを修正してください。
+    ー 関係する部分だけを出力し、関係ない部分は省略してください
+    ー 新しいファイルが必要であれば、そのファイルを作成してください。
+    ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
+    ー 課題に関係ない箇所は一切触らないでください。
 
-### 既存のコード
-{code_prompt}
+    また、修正内容の説明を示してください
 
-### 出力フォーマット
-```json
-{{
-    "file_path": str, # 修正したファイルのフルパス
-    "diff": str, # 修正後のコードの差分
-    "summary": str, # 修正内容を要約したもの(日本語)
-}}[]
-```
-""".strip()
+    ### 課題
+    {issue_str}
 
-response = anthropic.Anthropic().messages.create(
-    model="claude-3-5-sonnet-20240620",
-    max_tokens=1024,
-    messages=[{"role": "user", "content": prompt}],
-)
+    ### 既存のコード
+    {code_prompt}
 
-diff_str = response.content[0].text
+    ### 出力フォーマット
+    ```json
+    {{
+        "file_path": str, # 修正したファイルのフルパス
+        "diff": str, # 修正後のコードの差分
+        "summary": str, # 修正内容を要約したもの(日本語)
+    }}[]
+    ```
+    """.strip()
 
-# Generate merging prompt
-merge_prompt = f"""
-変更後のコードと変更前のコードをマージしてください。
-ー コード全体を出力してください
-ー 入力された変更点以外のリファクタリングを行ってはいけません。
-
-#### この修正で解決される課題
-{issue_str}
-
-#### 変更前
-{code_prompt}
-
-#### 変更後
-{diff_str}
-
-### 出力フォーマット
-```json
-{{
-    "path": str, # ファイルのフルパス
-    "body": str, # マージしたコード
-}}[]
-""".strip()
-
-
-response = anthropic.Anthropic().messages.create(
-    model="claude-3-5-sonnet-20240620",
-    max_tokens=2048,
-    messages=[{"role": "user", "content": merge_prompt}],
-)
-merged = response.content[0].text
-
-
-# Parse merged code into a PullRequest object
-files: list[File] = marvin.cast(merged, target=list[File])
-
-
-try:
-    diff = hypercast(
-        cls=Diff,
-        input_str=diff_str,
+    response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
-        llm_options={"max_tokens": 2048},
+        max_tokens=1024,
+        messages=[{"role": "user", "content": prompt}],
     )
-except JSONDecodeError as e:
-    diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
+
+    diff_str = response.content[0].text
+
+    # Generate merging prompt
+    merge_prompt = f"""
+    変更後のコードと変更前のコードをマージしてください。
+    ー コード全体を出力してください
+    ー 入力された変更点以外のリファクタリングを行ってはいけません。
+
+    #### この修正で解決される課題
+    {issue_str}
+
+    #### 変更前
+    {code_prompt}
+
+    #### 変更後
+    {diff_str}
+
+    ### 出力フォーマット
+    ```json
+    {{
+        "path": str, # ファイルのフルパス
+        "body": str, # マージしたコード
+    }}[]
+    """.strip()
 
 
-# Create new branch
-branch_name = f"ai/fix/issue-{issue_no}"
-os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
-
-# Write files to the repository
-for file in files:
-    with open(os.path.join(tmp_dir, file.path), "w") as f:
-        f.write(file.body)
-
-# Git add, commit and push
-os.system(f"cd {tmp_dir} && git add .")
-os.system(f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"')
-os.system(f"cd {tmp_dir} && git push origin {branch_name}")
-
-# PR description
-pr_description = f"""
-### 解決したかった課題
-#{issue_no} {issue.title}
-
-### AIによる説明
-{diff.summary}
-"""
-
-# Create pull request
-file_name = f"{tmp_dir}/pr_description.md"
-with open(file_name, "w") as f:
-    f.write(pr_description)
-file_relative_path = Path(file_name).name
-
-cmd = f"cd {tmp_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
-os.system(cmd)
+    response = anthropic.Anthropic().messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": merge_prompt}],
+    )
+    merged = response.content[0].text
