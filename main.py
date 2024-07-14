@@ -46,20 +46,16 @@ load_dotenv()
 client = OpenAI()
 marvin.settings.openai.api_key = dotenv_values(".env")["OPENAI_API_KEY"]
 
+base_dir = Path(__file__).parent.resolve()
 
-def remote_mode(issue_url):
+
+def remote_mode(issue_url: str):
     # https://github.com/[org_name]/[repository_name]/issues/[issue_no]
     issue_no = issue_url.split("/")[-1]
     repository_name = "/".join(issue_url.split("/")[-4:-2])
 
     # Clone repository under temporary directory
-    script_dir = Path(__file__).parent.resolve()
-    tmp_dir = script_dir / "tmp"
-    if tmp_dir.exists():
-        work_dir = tempfile.mkdtemp(prefix=f"{repository_name}_", dir=tmp_dir)
-    else:
-        work_dir = tempfile.mkdtemp(prefix=f"{repository_name}_")
-
+    work_dir = base_dir / f"tmp/{repository_name}"
     Path(work_dir).mkdir(parents=True)
 
     os.system(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
@@ -78,16 +74,9 @@ def remote_mode(issue_url):
     return work_dir, issue_no, issue_str
 
 
-def local_mode(repository, issue_no):
-    script_dir = Path(__file__).parent.resolve()
+def local_mode(repository: str, issue_no: str):
     repo_path = Path(repository).resolve()
-
-    if script_dir in repo_path.parents:
-        work_dir = repository
-    else:
-        tmp_dir = script_dir / "tmp"
-        work_dir = tempfile.mkdtemp(prefix=f"local_repo_", dir=tmp_dir)
-        shutil.copytree(repository, work_dir, dirs_exist_ok=True)
+    work_dir = repo_path
 
     issue_file = Path(work_dir) / ".ai" / f"{issue_no}.txt"
 
