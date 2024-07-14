@@ -139,30 +139,7 @@ def main():
     code_prompt = code_prompt.strip()
 
     # Generate prompt for AI
-    prompt = f"""
-    課題を解決するように既存のコードを修正してください。
-    ー 関係する部分だけを出力し、関係ない部分は省略してください
-    ー 新しいファイルが必要であれば、そのファイルを作成してください。
-    ー 可能な限り少ない変更量で課題を解決してください。課題に関係のないリファクタリングはあなたの仕事ではありません。
-    ー 課題に関係ない箇所は一切触らないでください。
-
-    また、修正内容の説明を示してください
-
-    ### 課題
-    {issue_str}
-
-    ### 既存のコード
-    {code_prompt}
-
-    ### 出力フォーマット
-    ```json
-    {{
-        "file_path": str, # 修正したファイルのフルパス
-        "diff": str, # 修正後のコードの差分
-        "summary": str, # 修正内容を要約したもの(日本語)
-    }}[]
-    ```
-    """.strip()
+    prompt = (Path(base_dir) / "data" / "prompt" / "modify_code.txt").read_text().format(issue_str=issue_str, code_prompt=code_prompt)
 
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
@@ -173,27 +150,7 @@ def main():
     diff_str = response.content[0].text
 
     # Generate merging prompt
-    merge_prompt = f"""
-    変更後のコードと変更前のコードをマージしてください。
-    ー コード全体を出力してください
-    ー 入力された変更点以外のリファクタリングを行ってはいけません。
-
-    #### この修正で解決される課題
-    {issue_str}
-
-    #### 変更前
-    {code_prompt}
-
-    #### 変更後
-    {diff_str}
-
-    ### 出力フォーマット
-    ```json
-    {{
-        "path": str, # ファイルのフルパス
-        "body": str, # マージしたコード
-    }}[]
-    """.strip()
+    merge_prompt = (Path(base_dir) / "data" / "prompt" / "merge_code.txt").read_text().format(issue_str=issue_str, code_prompt=code_prompt, diff_str=diff_str)
 
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
