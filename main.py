@@ -1,6 +1,6 @@
 import argparse
-import os
 import shutil
+import subprocess
 import sys
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -40,6 +40,17 @@ class Diff:
     commit_message: str
 
 
+def exec_at(cmd: str, work_dir: Path | None = None) -> str:
+    if work_dir is None:
+        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    else:
+        result = subprocess.run(
+            f"cd {work_dir} && {cmd}", shell=True, capture_output=True, text=True
+        )
+
+    return result.stdout
+
+
 # Load environment variables
 load_dotenv()
 client = OpenAI()
@@ -58,18 +69,16 @@ def remote_mode(issue_url: str):
     shutil.rmtree(work_dir, ignore_errors=True)
     Path(work_dir).mkdir(parents=True)
 
-    os.system(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
+    exec_at(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
 
     # Checkout main branch
-    os.system(f"cd {work_dir} && git checkout main")
+    exec_at("git checkout main", work_dir)
 
     # Pull latest changes
-    os.system(f"cd {work_dir} && git fetch -p && git pull")
+    exec_at("git fetch -p && git pull", work_dir)
 
     # Get issue details
-    issue_str = os.popen(
-        f"cd {work_dir} && gh issue view {issue_no} --json title,body"
-    ).read()
+    issue_str = exec_at(f"gh issue view {issue_no}  --json title,body", work_dir)
 
     return work_dir, issue_no, issue_str
 
@@ -197,35 +206,35 @@ def main():
     files: list[File] = marvin.cast(merged, target=list[File])
 
     try:
-        diff = hypercast(
+        diff: Diff = hypercast(
             cls=Diff,
             input_str=diff_str,
             model="claude-3-5-sonnet-20240620",
             llm_options={"max_tokens": 2048},
         )
     except JSONDecodeError:
-        diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
+        diff: Diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
 
     # Create new branch
     branch_name = f"ai/fix/issue-{issue_no}"
-    os.system(f"cd {work_dir} && git checkout -b {branch_name}")
+    exec_at(f"git checkout -b {branch_name}", work_dir)
 
     # Write files to the repository
     for file in files:
-        with open(os.path.join(work_dir, file.path), "w") as f:
+        with open(work_dir / file.path, "w") as f:
             f.write(file.body)
 
     # Git add, commit and push
-    os.system(f"cd {work_dir} && git add .")
+    exec_at(f"git add .", work_dir)
 
     if is_remote_mode:
         commit_message = f"AI: fix #{issue_no}, {diff.commit_message}"
     else:
         commit_message = f"AI: {diff.commit_message}"
-    os.system(f'cd {work_dir} && git commit -m "{commit_message}"')
+    exec_at(f'git commit -m "{commit_message}"', work_dir)
 
     if is_remote_mode:
-        os.system(f"cd {work_dir} && git push origin {branch_name}")
+        exec_at(f"git push origin {branch_name}", work_dir)
 
         # PR description
         pr_description = f"""
@@ -242,8 +251,8 @@ def main():
             f.write(pr_description)
         file_relative_path = Path(file_name).name
 
-        cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
-        os.system(cmd)
+        cmd = f"gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
+        exec_at(cmd, work_dir)
 
 
 if __name__ == "__main__":
