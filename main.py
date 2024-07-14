@@ -199,7 +199,7 @@ def main():
             model="claude-3-5-sonnet-20240620",
             llm_options={"max_tokens": 2048},
         )
-    except JSONDecodeError as e:
+    except JSONDecodeError:
         diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
 
     # Create new branch
@@ -216,22 +216,24 @@ def main():
     os.system(
         f'cd {work_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
     )
-    os.system(f"cd {work_dir} && git push origin {branch_name}")
 
-    # PR description
-    pr_description = f"""
-    ### 解決したかった課題
-    #{issue_no} {issue.title}
+    if args.remote:
+        os.system(f"cd {work_dir} && git push origin {branch_name}")
 
-    ### AIによる説明
-    {diff.summary}
-    """
+        # PR description
+        pr_description = f"""
+        ### 解決したかった課題
+        #{issue_no} {issue.title}
 
-    # Create pull request
-    file_name = f"{work_dir}/pr_description.md"
-    with open(file_name, "w") as f:
-        f.write(pr_description)
-    file_relative_path = Path(file_name).name
+        ### AIによる説明
+        {diff.summary}
+        """
 
-    cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
-    os.system(cmd)
+        # Create pull request
+        file_name = f"{work_dir}/pr_description.md"
+        with open(file_name, "w") as f:
+            f.write(pr_description)
+        file_relative_path = Path(file_name).name
+
+        cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
+        os.system(cmd)
