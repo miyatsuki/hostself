@@ -1,7 +1,7 @@
+import argparse
 import os
 import shutil
 import sys
-import argparse
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -45,6 +45,7 @@ load_dotenv()
 client = OpenAI()
 marvin.settings.openai.api_key = dotenv_values(".env")["OPENAI_API_KEY"]
 
+
 def remote_mode(issue_url):
     # https://github.com/[org_name]/[repository_name]/issues/[issue_no]
     issue_no = issue_url.split("/")[-1]
@@ -70,23 +71,27 @@ def remote_mode(issue_url):
 
     return tmp_dir, issue_no, issue_str
 
+
 def local_mode(repository, issue_no):
     tmp_dir = repository
     issue_file = Path(tmp_dir) / ".ai" / f"{issue_no}.txt"
-    
+
     if not issue_file.exists():
         print(f"Error: Issue file {issue_file} not found.")
         sys.exit(1)
-    
+
     with open(issue_file, "r") as f:
         issue_str = f.read()
-    
+
     return tmp_dir, issue_no, issue_str
+
 
 def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
     parser.add_argument("--remote", action="store_true", help="Run in remote mode")
-    parser.add_argument("repository", nargs="?", help="Repository path (for local mode)")
+    parser.add_argument(
+        "repository", nargs="?", help="Repository path (for local mode)"
+    )
     parser.add_argument("issue_no", nargs="?", help="Issue number (for local mode)")
     args = parser.parse_args()
 
@@ -97,11 +102,15 @@ def main():
         tmp_dir, issue_no, issue_str = remote_mode(sys.argv[2])
     else:
         if not args.repository or not args.issue_no:
-            print("Error: In local mode, please provide both repository path and issue number.")
+            print(
+                "Error: In local mode, please provide both repository path and issue number."
+            )
             sys.exit(1)
         tmp_dir, issue_no, issue_str = local_mode(args.repository, args.issue_no)
 
-    issue = hypercast(cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620")
+    issue = hypercast(
+        cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
+    )
 
     # Read and format context files
     codes = [
@@ -173,10 +182,56 @@ def main():
     }}[]
     """.strip()
 
-
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
         max_tokens=2048,
         messages=[{"role": "user", "content": merge_prompt}],
     )
     merged = response.content[0].text
+
+    # Parse merged code into a PullRequest object
+    files: list[File] = marvin.cast(merged, target=list[File])
+
+    try:
+        diff = hypercast(
+            cls=Diff,
+            input_str=diff_str,
+            model="claude-3-5-sonnet-20240620",
+            llm_options={"max_tokens": 2048},
+        )
+    except JSONDecodeError as e:
+        diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
+
+    # Create new branch
+    branch_name = f"ai/fix/issue-{issue_no}"
+    os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
+
+    # Write files to the repository
+    for file in files:
+        with open(os.path.join(tmp_dir, file.path), "w") as f:
+            f.write(file.body)
+
+    # Git add, commit and push
+    os.system(f"cd {tmp_dir} && git add .")
+    os.system(
+        f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
+    )
+    os.system(f"cd {tmp_dir} && git push origin {branch_name}")
+
+    # PR description
+    pr_description = f"""
+    ### 解決したかった課題
+    #{issue_no} {issue.title}
+
+    ### AIによる説明
+    {diff.summary}
+    """
+
+    # Create pull request
+    file_name = f"{tmp_dir}/pr_description.md"
+    with open(file_name, "w") as f:
+        f.write(pr_description)
+    file_relative_path = Path(file_name).name
+
+    cmd = f"cd {tmp_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
+    os.system(cmd)
