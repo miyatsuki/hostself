@@ -11,6 +11,34 @@ from dotenv import dotenv_values, load_dotenv
 from miyatsuki_tools.llm import hypercast  # type: ignore
 from openai import OpenAI
 
+
+@dataclass(frozen=True)
+class Issue:
+    title: str
+    body: str
+    related_files: str
+
+
+@dataclass(frozen=True)
+class File:
+    path: str
+    body: str
+
+
+@dataclass(frozen=True)
+class Diff:
+    """
+    Represents a difference between two versions of a file.
+
+    Attributes:
+        summary (str): 差分の要約
+        commit_message (str): 差分を一言で表すメッセージ。Conventional Commitsのフォーマットに従うこと。
+    """
+
+    summary: str
+    commit_message: str
+
+
 # Load environment variables
 load_dotenv()
 client = OpenAI()
@@ -38,13 +66,6 @@ os.system(f"cd {tmp_dir} && git fetch -p && git pull")
 issue_str = os.popen(
     f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
 ).read()
-
-
-@dataclass(frozen=True)
-class Issue:
-    title: str
-    body: str
-    related_files: str
 
 
 issue = hypercast(cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620")
@@ -129,28 +150,8 @@ response = anthropic.Anthropic().messages.create(
 merged = response.content[0].text
 
 
-@dataclass(frozen=True)
-class File:
-    path: str
-    body: str
-
-
 # Parse merged code into a PullRequest object
 files: list[File] = marvin.cast(merged, target=list[File])
-
-
-@dataclass(frozen=True)
-class Diff:
-    """
-    Represents a difference between two versions of a file.
-
-    Attributes:
-        summary (str): 差分の要約
-        commit_message (str): 差分を一言で表すメッセージ。Conventional Commitsのフォーマットに従うこと。
-    """
-
-    summary: str
-    commit_message: str
 
 
 try:
