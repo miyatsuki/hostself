@@ -52,6 +52,7 @@ def exec_at(cmd: str, work_dir: Path | None = None) -> str:
 
 
 base_dir = Path(__file__).parent.resolve()
+prompt_dir = base_dir / "data" / "prompt"
 
 # Load environment variables
 load_dotenv(base_dir / ".env")
@@ -139,7 +140,11 @@ def main():
     code_prompt = code_prompt.strip()
 
     # Generate prompt for AI
-    prompt = (Path(base_dir) / "data" / "prompt" / "modify_code.txt").read_text().format(issue_str=issue_str, code_prompt=code_prompt)
+    prompt = (
+        (prompt_dir / "modify_code.txt")
+        .read_text()
+        .format(issue_str=issue_str, code_prompt=code_prompt)
+    )
 
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
@@ -150,7 +155,11 @@ def main():
     diff_str = response.content[0].text
 
     # Generate merging prompt
-    merge_prompt = (Path(base_dir) / "data" / "prompt" / "merge_code.txt").read_text().format(issue_str=issue_str, code_prompt=code_prompt, diff_str=diff_str)
+    merge_prompt = (
+        (prompt_dir / "merge_code.txt")
+        .read_text()
+        .format(issue_str=issue_str, code_prompt=code_prompt, diff_str=diff_str)
+    )
 
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
