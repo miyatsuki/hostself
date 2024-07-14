@@ -52,29 +52,29 @@ def remote_mode(issue_url):
     repository_name = "/".join(issue_url.split("/")[-4:-2])
 
     # Clone repository under temporary directory
-    tmp_dir = f"tmp/{repository_name}"
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    Path(tmp_dir).mkdir(parents=True)
+    work_dir = f"tmp/{repository_name}"
+    shutil.rmtree(work_dir, ignore_errors=True)
+    Path(work_dir).mkdir(parents=True)
 
-    os.system(f"gh repo clone {repository_name} {tmp_dir} -- --depth=1")
+    os.system(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
 
     # Checkout main branch
-    os.system(f"cd {tmp_dir} && git checkout main")
+    os.system(f"cd {work_dir} && git checkout main")
 
     # Pull latest changes
-    os.system(f"cd {tmp_dir} && git fetch -p && git pull")
+    os.system(f"cd {work_dir} && git fetch -p && git pull")
 
     # Get issue details
     issue_str = os.popen(
-        f"cd {tmp_dir} && gh issue view {issue_no} --json title,body"
+        f"cd {work_dir} && gh issue view {issue_no} --json title,body"
     ).read()
 
-    return tmp_dir, issue_no, issue_str
+    return work_dir, issue_no, issue_str
 
 
 def local_mode(repository, issue_no):
-    tmp_dir = repository
-    issue_file = Path(tmp_dir) / ".ai" / f"{issue_no}.txt"
+    work_dir = repository
+    issue_file = Path(work_dir) / ".ai" / f"{issue_no}.txt"
 
     if not issue_file.exists():
         print(f"Error: Issue file {issue_file} not found.")
@@ -83,7 +83,7 @@ def local_mode(repository, issue_no):
     with open(issue_file, "r") as f:
         issue_str = f.read()
 
-    return tmp_dir, issue_no, issue_str
+    return work_dir, issue_no, issue_str
 
 
 def main():
@@ -99,14 +99,14 @@ def main():
         if len(sys.argv) != 3:
             print("Error: In remote mode, please provide the issue URL as an argument.")
             sys.exit(1)
-        tmp_dir, issue_no, issue_str = remote_mode(sys.argv[2])
+        work_dir, issue_no, issue_str = remote_mode(sys.argv[2])
     else:
         if not args.repository or not args.issue_no:
             print(
                 "Error: In local mode, please provide both repository path and issue number."
             )
             sys.exit(1)
-        tmp_dir, issue_no, issue_str = local_mode(args.repository, args.issue_no)
+        work_dir, issue_no, issue_str = local_mode(args.repository, args.issue_no)
 
     issue = hypercast(
         cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
@@ -114,7 +114,7 @@ def main():
 
     # Read and format context files
     codes = [
-        (file_path, open(f"{tmp_dir}/{file_path.strip()}").read())
+        (file_path, open(f"{work_dir}/{file_path.strip()}").read())
         for file_path in issue.related_files.split(",")
     ]
     code_prompt = ""
@@ -204,19 +204,19 @@ def main():
 
     # Create new branch
     branch_name = f"ai/fix/issue-{issue_no}"
-    os.system(f"cd {tmp_dir} && git checkout -b {branch_name}")
+    os.system(f"cd {work_dir} && git checkout -b {branch_name}")
 
     # Write files to the repository
     for file in files:
-        with open(os.path.join(tmp_dir, file.path), "w") as f:
+        with open(os.path.join(work_dir, file.path), "w") as f:
             f.write(file.body)
 
     # Git add, commit and push
-    os.system(f"cd {tmp_dir} && git add .")
+    os.system(f"cd {work_dir} && git add .")
     os.system(
-        f'cd {tmp_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
+        f'cd {work_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
     )
-    os.system(f"cd {tmp_dir} && git push origin {branch_name}")
+    os.system(f"cd {work_dir} && git push origin {branch_name}")
 
     # PR description
     pr_description = f"""
@@ -228,10 +228,10 @@ def main():
     """
 
     # Create pull request
-    file_name = f"{tmp_dir}/pr_description.md"
+    file_name = f"{work_dir}/pr_description.md"
     with open(file_name, "w") as f:
         f.write(pr_description)
     file_relative_path = Path(file_name).name
 
-    cmd = f"cd {tmp_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
+    cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
     os.system(cmd)
