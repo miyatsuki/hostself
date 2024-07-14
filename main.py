@@ -5,6 +5,7 @@ import sys
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
+import tempfile
 
 import anthropic  # type: ignore
 import marvin  # type: ignore
@@ -52,8 +53,13 @@ def remote_mode(issue_url):
     repository_name = "/".join(issue_url.split("/")[-4:-2])
 
     # Clone repository under temporary directory
-    work_dir = f"tmp/{repository_name}"
-    shutil.rmtree(work_dir, ignore_errors=True)
+    script_dir = Path(__file__).parent.resolve()
+    tmp_dir = script_dir / "tmp"
+    if tmp_dir.exists():
+        work_dir = tempfile.mkdtemp(prefix=f"{repository_name}_", dir=tmp_dir)
+    else:
+        work_dir = tempfile.mkdtemp(prefix=f"{repository_name}_")
+    
     Path(work_dir).mkdir(parents=True)
 
     os.system(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
@@ -73,7 +79,16 @@ def remote_mode(issue_url):
 
 
 def local_mode(repository, issue_no):
-    work_dir = repository
+    script_dir = Path(__file__).parent.resolve()
+    repo_path = Path(repository).resolve()
+    
+    if script_dir in repo_path.parents:
+        work_dir = repository
+    else:
+        tmp_dir = script_dir / "tmp"
+        work_dir = tempfile.mkdtemp(prefix=f"local_repo_", dir=tmp_dir)
+        shutil.copytree(repository, work_dir, dirs_exist_ok=True)
+    
     issue_file = Path(work_dir) / ".ai" / f"{issue_no}.txt"
 
     if not issue_file.exists():
@@ -168,72 +183,4 @@ def main():
     #### この修正で解決される課題
     {issue_str}
 
-    #### 変更前
-    {code_prompt}
-
-    #### 変更後
-    {diff_str}
-
-    ### 出力フォーマット
-    ```json
-    {{
-        "path": str, # ファイルのフルパス
-        "body": str, # マージしたコード
-    }}[]
-    """.strip()
-
-    response = anthropic.Anthropic().messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=2048,
-        messages=[{"role": "user", "content": merge_prompt}],
-    )
-    merged = response.content[0].text
-
-    # Parse merged code into a PullRequest object
-    files: list[File] = marvin.cast(merged, target=list[File])
-
-    try:
-        diff = hypercast(
-            cls=Diff,
-            input_str=diff_str,
-            model="claude-3-5-sonnet-20240620",
-            llm_options={"max_tokens": 2048},
-        )
-    except JSONDecodeError:
-        diff = hypercast(cls=Diff, input_str=diff_str, model="gpt-4o")
-
-    # Create new branch
-    branch_name = f"ai/fix/issue-{issue_no}"
-    os.system(f"cd {work_dir} && git checkout -b {branch_name}")
-
-    # Write files to the repository
-    for file in files:
-        with open(os.path.join(work_dir, file.path), "w") as f:
-            f.write(file.body)
-
-    # Git add, commit and push
-    os.system(f"cd {work_dir} && git add .")
-    os.system(
-        f'cd {work_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
-    )
-
-    if args.remote:
-        os.system(f"cd {work_dir} && git push origin {branch_name}")
-
-        # PR description
-        pr_description = f"""
-        ### 解決したかった課題
-        #{issue_no} {issue.title}
-
-        ### AIによる説明
-        {diff.summary}
-        """
-
-        # Create pull request
-        file_name = f"{work_dir}/pr_description.md"
-        with open(file_name, "w") as f:
-            f.write(pr_description)
-        file_relative_path = Path(file_name).name
-
-        cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
-        os.system(cmd)
+    ####
