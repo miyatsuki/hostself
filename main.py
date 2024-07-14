@@ -51,12 +51,12 @@ def exec_at(cmd: str, work_dir: Path | None = None) -> str:
     return result.stdout
 
 
-# Load environment variables
-load_dotenv()
-client = OpenAI()
-marvin.settings.openai.api_key = dotenv_values(".env")["OPENAI_API_KEY"]
-
 base_dir = Path(__file__).parent.resolve()
+
+# Load environment variables
+load_dotenv(base_dir / ".env")
+client = OpenAI()
+marvin.settings.openai.api_key = dotenv_values(base_dir / ".env")["OPENAI_API_KEY"]
 
 
 def remote_mode(issue_url: str):
