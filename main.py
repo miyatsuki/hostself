@@ -74,43 +74,43 @@ def remote_mode(issue_url: str):
     return work_dir, issue_no, issue_str
 
 
-def local_mode(repository: str, issue_no: str):
-    repo_path = Path(repository).resolve()
-    work_dir = repo_path
+def local_mode(issue_file: str):
+    issue_path = Path(issue_file).resolve()
+    assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
 
-    issue_file = Path(work_dir) / ".ai" / f"{issue_no}.txt"
+    # Find git repository root
+    work_dir = issue_path.parent
+    while not (work_dir / ".git").exists():
+        work_dir = work_dir.parent
+        if work_dir == work_dir.parent:  # Reached root directory
+            print(f"Error: Git repository not found for {issue_file}")
+            sys.exit(1)
 
-    if not issue_file.exists():
-        print(f"Error: Issue file {issue_file} not found.")
-        sys.exit(1)
-
-    with open(issue_file, "r") as f:
+    with open(issue_path, "r") as f:
         issue_str = f.read()
 
-    return work_dir, issue_no, issue_str
+    return work_dir, issue_path.stem, issue_str
 
 
 def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
     parser.add_argument("--remote", action="store_true", help="Run in remote mode")
     parser.add_argument(
-        "repository", nargs="?", help="Repository path (for local mode)"
+        "issue_file", nargs="?", help="Issue file path (for local mode)"
     )
-    parser.add_argument("issue_no", nargs="?", help="Issue number (for local mode)")
     args = parser.parse_args()
 
-    if args.remote:
+    is_remote_mode: bool = args.remote
+    if is_remote_mode:
         if len(sys.argv) != 3:
             print("Error: In remote mode, please provide the issue URL as an argument.")
             sys.exit(1)
         work_dir, issue_no, issue_str = remote_mode(sys.argv[2])
     else:
-        if not args.repository or not args.issue_no:
-            print(
-                "Error: In local mode, please provide both repository path and issue number."
-            )
+        if not args.issue_file:
+            print("Error: In local mode, please provide the issue file path.")
             sys.exit(1)
-        work_dir, issue_no, issue_str = local_mode(args.repository, args.issue_no)
+        work_dir, issue_no, issue_str = local_mode(args.issue_file)
 
     issue = hypercast(
         cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
@@ -188,7 +188,7 @@ def main():
 
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=2048,
+        max_tokens=4096,
         messages=[{"role": "user", "content": merge_prompt}],
     )
     merged = response.content[0].text
@@ -217,11 +217,14 @@ def main():
 
     # Git add, commit and push
     os.system(f"cd {work_dir} && git add .")
-    os.system(
-        f'cd {work_dir} && git commit -m "AI: fix #{issue_no}, {diff.commit_message}"'
-    )
 
-    if args.remote:
+    if is_remote_mode:
+        commit_message = f"AI: fix #{issue_no}, {diff.commit_message}"
+    else:
+        commit_message = f"AI: {diff.commit_message}"
+    os.system(f'cd {work_dir} && git commit -m "{commit_message}"')
+
+    if is_remote_mode:
         os.system(f"cd {work_dir} && git push origin {branch_name}")
 
         # PR description
