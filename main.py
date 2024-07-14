@@ -2,7 +2,6 @@ import argparse
 import os
 import shutil
 import sys
-import tempfile
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -56,6 +55,7 @@ def remote_mode(issue_url: str):
 
     # Clone repository under temporary directory
     work_dir = base_dir / f"tmp/{repository_name}"
+    shutil.rmtree(work_dir, ignore_errors=True)
     Path(work_dir).mkdir(parents=True)
 
     os.system(f"gh repo clone {repository_name} {work_dir} -- --depth=1")
