@@ -252,3 +252,7 @@ def main():
 
         cmd = f"cd {work_dir} && gh pr create --base main --head '{branch_name}' --title '{diff.commit_message}' --body-file {file_relative_path}"
         os.system(cmd)
+
+
+if __name__ == "__main__":
+    main()
