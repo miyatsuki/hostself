@@ -29,11 +29,11 @@ class File:
 @dataclass(frozen=True)
 class Diff:
     """
-    Represents a difference between two versions of a file.
+    二つのファイルのDiffを示す
 
     Attributes:
         summary (str): 差分の要約
-        commit_message (str): 差分を一言で表すメッセージ。Conventional Commitsのフォーマットに従うこと。
+        commit_message (str): 差分を一言で表すコミットメッセージ。Conventional Commitsのフォーマットに従った日本語。
     """
 
     summary: str
@@ -108,6 +108,7 @@ def main():
     parser.add_argument(
         "issue_file", nargs="?", help="Issue file path (for local mode)"
     )
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
     is_remote_mode: bool = args.remote
@@ -122,6 +123,7 @@ def main():
             sys.exit(1)
         work_dir, issue_no, issue_str = local_mode(args.issue_file)
 
+    verbose: bool = args.verbose
     issue = hypercast(
         cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
     )
@@ -153,6 +155,8 @@ def main():
     )
 
     diff_str = response.content[0].text
+    if verbose:
+        print(f"#### AIによる実装:\n{response.content[0].text}")
 
     # Generate merging prompt
     merge_prompt = (
@@ -167,6 +171,8 @@ def main():
         messages=[{"role": "user", "content": merge_prompt}],
     )
     merged = response.content[0].text
+    if verbose:
+        print(f"#### マージ結果:\n{merged}")
 
     # Parse merged code into a PullRequest object
     files: list[File] = marvin.cast(merged, target=list[File])
