@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from typing import Optional
 from json import JSONDecodeError
 from pathlib import Path
 
@@ -106,8 +107,8 @@ def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
     parser.add_argument("--remote", action="store_true", help="Run in remote mode")
     parser.add_argument(
-        "issue_file", nargs="?", help="Issue file path (for local mode)"
-    )
+        "issue_file", nargs="?", help="Issue file path (for local mode)")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
 
     is_remote_mode: bool = args.remote
@@ -122,6 +123,7 @@ def main():
             sys.exit(1)
         work_dir, issue_no, issue_str = local_mode(args.issue_file)
 
+    verbose: bool = args.verbose
     issue = hypercast(
         cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
     )
@@ -152,6 +154,8 @@ def main():
         messages=[{"role": "user", "content": prompt}],
     )
 
+    if verbose:
+        print(f"AI response:\n{response.content[0].text}")
     diff_str = response.content[0].text
 
     # Generate merging prompt
@@ -167,6 +171,8 @@ def main():
         messages=[{"role": "user", "content": merge_prompt}],
     )
     merged = response.content[0].text
+    if verbose:
+        print(f"AI response:\n{merged}")
 
     # Parse merged code into a PullRequest object
     files: list[File] = marvin.cast(merged, target=list[File])
