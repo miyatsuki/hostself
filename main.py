@@ -1,9 +1,9 @@
 import argparse
+import fnmatch
+import os
 import shutil
 import subprocess
 import sys
-import os
-import fnmatch
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -13,13 +13,6 @@ import marvin  # type: ignore
 from dotenv import dotenv_values, load_dotenv
 from miyatsuki_tools.llm import hypercast  # type: ignore
 from openai import OpenAI
-
-
-@dataclass(frozen=True)
-class Issue:
-    title: str
-    body: str
-    related_files: str
 
 
 @dataclass(frozen=True)
@@ -107,55 +100,61 @@ def local_mode(issue_file: str):
 def get_folder_structure(root_dir: Path) -> str:
     structure = []
     ignore_patterns = []
-    
+
     # .gitignoreの内容を読み込む
-    gitignore_path = root_dir / '.gitignore'
+    gitignore_path = root_dir / ".gitignore"
     if gitignore_path.exists():
-        with open(gitignore_path, 'r') as f:
-            ignore_patterns = [line.strip() for line in f if line.strip() and not line.startswith('#')]
-    
+        with open(gitignore_path, "r") as f:
+            ignore_patterns = [
+                line.strip() for line in f if line.strip() and not line.startswith("#")
+            ]
+
     for root, _, files in os.walk(root_dir):
-        level = root.replace(str(root_dir), '').count(os.sep)
-        indent = '│   ' * (level - 1) + '├── ' if level > 0 else ''
+        level = root.replace(str(root_dir), "").count(os.sep)
+        indent = "│   " * (level - 1) + "├── " if level > 0 else ""
         rel_path = os.path.relpath(root, root_dir)
-        
+
         # .gitignoreパターンに一致するフォルダをスキップ
         if any(fnmatch.fnmatch(rel_path, pattern) for pattern in ignore_patterns):
             continue
-        
-        structure.append(f'{indent}{os.path.basename(root)}/')
-        
+
+        structure.append(f"{indent}{os.path.basename(root)}/")
+
         for file in files:
             file_path = os.path.join(rel_path, file)
             # .gitignoreパターンに一致するファイルをスキップ
             if any(fnmatch.fnmatch(file_path, pattern) for pattern in ignore_patterns):
                 continue
-            structure.append(f'{indent}│   {file}')
-    
-    return '\n'.join(structure)
+            structure.append(f"{indent}│   {file}")
+
+    return "\n".join(structure)
 
 
-def modify_code(issue: Issue, work_dir: Path, folder_structure: str):
+def create_code_prompt(selected_files: list[str], work_dir: Path) -> str:
     # Read and format context files
     codes = [
         (file_path, open(f"{work_dir}/{file_path.strip()}").read())
-        for file_path in issue.related_files.split(",")
+        for file_path in selected_files
     ]
     code_prompt = ""
     for file_path, code in codes:
         code_prompt += f"```{file_path}\n"
         code_prompt += code
-        code_prompt += "```
-
-"
-
+        code_prompt += "```"
     code_prompt = code_prompt.strip()
 
+    return code_prompt
+
+
+def modify_code(issue_str: str, code_prompt: str):
     # Generate prompt for AI
     prompt = (
         (prompt_dir / "modify_code.txt")
         .read_text()
-        .format(issue_str=issue_str, code_prompt=code_prompt, folder_structure=folder_structure)
+        .format(
+            issue_str=issue_str,
+            code_prompt=code_prompt,
+        )
     )
 
     response = anthropic.Anthropic().messages.create(
@@ -189,13 +188,25 @@ def main():
         work_dir, issue_no, issue_str = local_mode(args.issue_file)
 
     verbose: bool = args.verbose
-    issue = hypercast(
-        cls=Issue, input_str=issue_str, model="claude-3-5-sonnet-20240620"
-    )
 
     folder_structure = get_folder_structure(work_dir)
+    select_prompt = (
+        (prompt_dir / "select_file.txt")
+        .read_text()
+        .format(folder_structure=folder_structure)
+    )
+    response = anthropic.Anthropic().messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=4096,
+        messages=[{"role": "user", "content": select_prompt}],
+    )
+    merged = response.content[0].text
+    selected_files: list[str] = marvin.cast(merged, target=list[File])
+    if verbose:
+        print(f"#### AIにより選択されたファイル:\n{selected_files}")
 
-    diff_str = modify_code(issue, work_dir, folder_structure)
+    code_prompt = create_code_prompt(selected_files, work_dir)
+    diff_str = modify_code(issue_str, code_prompt)
     if verbose:
         print(f"#### AIによる実装:\n{diff_str}")
 
@@ -250,6 +261,7 @@ def main():
     exec_at(f'git commit -m "{commit_message}"', work_dir)
 
     if is_remote_mode:
+        # TODO: 動かないので後で考える
         exec_at(f"git push origin {branch_name}", work_dir)
 
         # PR description
