@@ -5,7 +5,6 @@ import sys
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from typing import Optional
 
 import anthropic  # type: ignore
 import marvin  # type: ignore
@@ -30,11 +29,11 @@ class File:
 @dataclass(frozen=True)
 class Diff:
     """
-    Represents a difference between two versions of a file.
+    二つのファイルのDiffを示す
 
     Attributes:
         summary (str): 差分の要約
-        commit_message (str): 差分を一言で表すメッセージ。Conventional Commitsのフォーマットに従うこと。
+        commit_message (str): 差分を一言で表すコミットメッセージ。Conventional Commitsのフォーマットに従った日本語。
     """
 
     summary: str
