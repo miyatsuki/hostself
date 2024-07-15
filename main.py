@@ -162,13 +162,13 @@ def main():
         .read_text()
         .format(folder_structure=folder_structure, issue_str=issue_str)
     )
-    response = client.chat.completions.create(
-        model="gpt-4o",
+    response = anthropic.Anthropic().messages.create(
+        model="claude-3-5-sonnet-20240620",
+        max_tokens=4096,
         messages=[{"role": "user", "content": select_prompt}],
-        response_format={"type": "json_object"},
     )
-    merged = response.choices[0].message.content
-    selected_files: list[str] = marvin.cast(merged, target=list[str])
+    selected_string = response.content[0].text
+    selected_files: list[str] = marvin.cast(selected_string, target=list[str])
     if verbose:
         print(f"#### AIにより選択されたファイル:\n{selected_files}")
 
