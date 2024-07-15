@@ -109,23 +109,41 @@ def get_folder_structure(root_dir: Path) -> str:
                 line.strip() for line in f if line.strip() and not line.startswith("#")
             ]
 
+    all_files: list[Path] = []
     for root, _, files in os.walk(root_dir):
-        level = root.replace(str(root_dir), "").count(os.sep)
-        indent = "│   " * (level - 1) + "├── " if level > 0 else ""
-        rel_path = os.path.relpath(root, root_dir)
-
-        # .gitignoreパターンに一致するフォルダをスキップ
-        if any(fnmatch.fnmatch(rel_path, pattern) for pattern in ignore_patterns):
-            continue
-
-        structure.append(f"{indent}{os.path.basename(root)}/")
+        all_files.append(Path(root))
 
         for file in files:
-            file_path = os.path.join(rel_path, file)
-            # .gitignoreパターンに一致するファイルをスキップ
-            if any(fnmatch.fnmatch(file_path, pattern) for pattern in ignore_patterns):
-                continue
-            structure.append(f"{indent}│   {file}")
+            file_path = os.path.join(root, file)
+            all_files.append(Path(file_path))
+
+    # ignore_patternsにマッチするファイルを除外
+    all_files = [
+        file
+        for file in all_files
+        if not any(
+            fnmatch.fnmatch(file.relative_to(root_dir).as_posix(), pattern)
+            for pattern in ignore_patterns
+        )
+    ]
+
+    indent_str = "│   "
+    for file in sorted(all_files):
+        # root_dirからの相対パス
+        rel_path = file.relative_to(root_dir)
+
+        if rel_path.stem == "":
+            level = -1
+        else:
+            level = rel_path.as_posix().count(os.sep)
+
+        if level == -1:
+            structure.append(f"{root_dir.stem}/")
+        else:
+            if Path(file).is_dir():
+                structure.append(f"{indent_str * level}├── {rel_path.name}/")
+            else:
+                structure.append(f"{indent_str * level}├── {rel_path.name}")
 
     return "\n".join(structure)
 
@@ -193,7 +211,7 @@ def main():
     select_prompt = (
         (prompt_dir / "select_file.txt")
         .read_text()
-        .format(folder_structure=folder_structure)
+        .format(folder_structure=folder_structure, issue_str=issue_str)
     )
     response = anthropic.Anthropic().messages.create(
         model="claude-3-5-sonnet-20240620",
@@ -201,7 +219,7 @@ def main():
         messages=[{"role": "user", "content": select_prompt}],
     )
     merged = response.content[0].text
-    selected_files: list[str] = marvin.cast(merged, target=list[File])
+    selected_files: list[str] = marvin.cast(merged, target=list[str])
     if verbose:
         print(f"#### AIにより選択されたファイル:\n{selected_files}")
 
