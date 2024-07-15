@@ -95,13 +95,13 @@ def local_mode(issue_file: str):
     return work_dir, issue_path.stem, issue_str
 
 
-def create_code_prompt(selected_files: list[str], work_dir: Path) -> str:
+def create_code_prompt(selected_files: list[Path], work_dir: Path) -> str:
     # Read and format context files
     codes: list[tuple[str, str]] = []
 
     for file_path in selected_files:
-        with open(f"{work_dir}/{file_path.strip()}") as f:
-            codes.append((file_path, f.read()))
+        with open(work_dir / file_path) as f:
+            codes.append((file_path.as_posix(), f.read()))
 
     code_prompt = ""
     for file_path, code in codes:
@@ -168,7 +168,7 @@ def main():
         messages=[{"role": "user", "content": select_prompt}],
     )
     selected_string = response.content[0].text
-    selected_files: list[str] = marvin.cast(selected_string, target=list[str])
+    selected_files: list[Path] = marvin.cast(selected_string, target=list[Path])
     if verbose:
         print(f"#### AIにより選択されたファイル:\n{selected_files}")
 
