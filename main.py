@@ -1,6 +1,4 @@
 import argparse
-import fnmatch
-import os
 import shutil
 import subprocess
 import sys
@@ -99,15 +97,17 @@ def local_mode(issue_file: str):
 
 def create_code_prompt(selected_files: list[str], work_dir: Path) -> str:
     # Read and format context files
-    codes = [
-        (file_path, open(f"{work_dir}/{file_path.strip()}").read())
-        for file_path in selected_files
-    ]
+    codes: list[tuple[str, str]] = []
+
+    for file_path in selected_files:
+        with open(f"{work_dir}/{file_path.strip()}") as f:
+            codes.append((file_path, f.read()))
+
     code_prompt = ""
     for file_path, code in codes:
         code_prompt += f"```{file_path}\n"
         code_prompt += code
-        code_prompt += "```"
+        code_prompt += "```\n\n"
     code_prompt = code_prompt.strip()
 
     return code_prompt
