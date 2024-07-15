@@ -97,57 +97,6 @@ def local_mode(issue_file: str):
     return work_dir, issue_path.stem, issue_str
 
 
-def get_folder_structure(root_dir: Path) -> str:
-    structure = []
-    ignore_patterns = []
-
-    # .gitignoreの内容を読み込む
-    gitignore_path = root_dir / ".gitignore"
-    if gitignore_path.exists():
-        with open(gitignore_path, "r") as f:
-            ignore_patterns = [
-                line.strip() for line in f if line.strip() and not line.startswith("#")
-            ]
-
-    all_files: list[Path] = []
-    for root, _, files in os.walk(root_dir):
-        all_files.append(Path(root))
-
-        for file in files:
-            file_path = os.path.join(root, file)
-            all_files.append(Path(file_path))
-
-    # ignore_patternsにマッチするファイルを除外
-    all_files = [
-        file
-        for file in all_files
-        if not any(
-            fnmatch.fnmatch(file.relative_to(root_dir).as_posix(), pattern)
-            for pattern in ignore_patterns
-        )
-    ]
-
-    indent_str = "│   "
-    for file in sorted(all_files):
-        # root_dirからの相対パス
-        rel_path = file.relative_to(root_dir)
-
-        if rel_path.stem == "":
-            level = -1
-        else:
-            level = rel_path.as_posix().count(os.sep)
-
-        if level == -1:
-            structure.append(f"{root_dir.stem}/")
-        else:
-            if Path(file).is_dir():
-                structure.append(f"{indent_str * level}├── {rel_path.name}/")
-            else:
-                structure.append(f"{indent_str * level}├── {rel_path.name}")
-
-    return "\n".join(structure)
-
-
 def create_code_prompt(selected_files: list[str], work_dir: Path) -> str:
     # Read and format context files
     codes = [
@@ -207,18 +156,18 @@ def main():
 
     verbose: bool = args.verbose
 
-    folder_structure = get_folder_structure(work_dir)
+    folder_structure = exec_at("git ls-files", work_dir)
     select_prompt = (
         (prompt_dir / "select_file.txt")
         .read_text()
         .format(folder_structure=folder_structure, issue_str=issue_str)
     )
-    response = anthropic.Anthropic().messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=4096,
+    response = client.chat.completions.create(
+        model="gpt-4o",
         messages=[{"role": "user", "content": select_prompt}],
+        response_format={"type": "json_object"},
     )
-    merged = response.content[0].text
+    merged = response.choices[0].message.content
     selected_files: list[str] = marvin.cast(merged, target=list[str])
     if verbose:
         print(f"#### AIにより選択されたファイル:\n{selected_files}")

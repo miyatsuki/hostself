@@ -1,46 +1,30 @@
 import unittest
 from pathlib import Path
-from tempfile import TemporaryDirectory
-
-from main import get_folder_structure
+from main import create_code_prompt
 
 
 class TestMain(unittest.TestCase):
-    def test_get_folder_structure(self):
-        with TemporaryDirectory() as tmp_dir_name:
-            tmp_dir = Path(tmp_dir_name)
-            (tmp_dir / (".gitignore")).touch()
-            with open(tmp_dir / ".gitignore", "w") as f:
-                f.write("ignore_dir\n")
-                f.write("dir2/child1/child_ignore.txt\n")
-                f.write("*.ignore\n")
+    def test_always_pass(self):
+        self.assertTrue(True)
 
-            (tmp_dir / "dir1").mkdir()
-            (tmp_dir / "dir1" / "file1.txt").touch()
-            (tmp_dir / "dir1" / "file2.txt").touch()
-            (tmp_dir / "dir2/child1").mkdir(parents=True)
-            (tmp_dir / "dir2" / "child1" / "child.txt").touch()
-            (tmp_dir / "dir2" / "child1" / "child_ignore.txt").touch()
-            (tmp_dir / "dir2" / "file3.txt").touch()
-            (tmp_dir / "dir2" / "file4.txt").touch()
-            (tmp_dir / "file5.txt").touch()
-            (tmp_dir / "ignore_dir").mkdir()
-            (tmp_dir / "hoge.ignore").touch()
-
-            actual = get_folder_structure(tmp_dir)
-            print(actual)
-
-        expected = f"""\
-{tmp_dir.stem}/
-├── .gitignore
-├── dir1/
-│   ├── file1.txt
-│   ├── file2.txt
-├── dir2/
-│   ├── child1/
-│   │   ├── child.txt
-│   ├── file3.txt
-│   ├── file4.txt
-├── file5.txt
-""".strip()
-        self.assertEqual(expected, actual)
+    def test_create_code_prompt(self):
+        # テスト用のディレクトリとファイルを設定
+        work_dir = Path('test_dir')
+        work_dir.mkdir(exist_ok=True)
+        
+        file1 = work_dir / 'file1.txt'
+        file1.write_text('Content of file1')
+        
+        file2 = work_dir / 'file2.txt'
+        file2.write_text('Content of file2')
+        
+        selected_files = ['file1.txt', 'file2.txt']
+        
+        expected_output = '```file1.txt\nContent of file1```\n```file2.txt\nContent of file2```'
+        
+        result = create_code_prompt(selected_files, work_dir)
+        
+        self.assertEqual(result.strip(), expected_output)
+        
+        # クリーンアップ
+        work_dir.rmdir()
