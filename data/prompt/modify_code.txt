@@ -12,9 +12,6 @@
 ### 既存のコード
 {code_prompt}
 
-### フォルダ構造
-{folder_structure}
-
 ### 出力フォーマット
 ```json
 {{
