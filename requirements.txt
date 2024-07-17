@@ -1,5 +1,4 @@
-marvin
+langchain
+langchain-openai
 openai
 python-dotenv
-pydantic
-git+https://github.com/miyatsuki/tools.git
