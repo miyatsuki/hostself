@@ -1,26 +1,32 @@
 # AI-assisted Code Modification Tool
 
-## About
+## tl;dr
 
-This tool is an AI-assisted code modification utility that helps automate the process of fixing issues in code repositories. It can work in both local and remote modes, analyzing issues and generating code changes to address them.
+このリポジトリは、AIを用いたコード修正ツールです。コードリポジトリの問題を自動で解析し、修正を提案・適用します。
 
-## Usage
+## このリポジトリについて
 
-### Remote Mode
+このツールは、コードリポジトリの問題を自動で解析し、修正を提案・適用するAIアシスタントです。ローカルモードとリモートモードの両方で動作し、問題を分析して修正コードを生成します。
 
-```
-python main.py --remote <issue_url>
-```
+## インストール方法
 
-### Local Mode
+1. リポジトリをクローン
+2. 依存関係をインストール: `pip install -r requirements.txt`
+3. 必要な環境変数を`.env`ファイルに設定（OPENAI_API_KEYが必要）
+4. 上記の使用方法に従ってツールを実行
+
+## 使い方
+
+### コマンドの内容
 
 ```
 python main.py <issue_file>
 ```
 
-## Installation
+### 実行結果の例
 
-1. Clone the repository
-2. Install dependencies: `pip install -r requirements.txt`
-3. Set up environment variables in a `.env` file (OPENAI_API_KEY required)
-4. Run the tool using the usage instructions above
+```
+$ python main.py issue.json
+Fixing issue in file main.py
+Issue fixed successfully!
+```
