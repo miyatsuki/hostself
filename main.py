@@ -24,7 +24,7 @@ base_dir = Path(__file__).parent.resolve()
 llm = ChatOpenAI(model="gpt-4o", api_key=dotenv_values()["OPENAI_API_KEY"])
 
 
-def local_mode(issue_file: str, branch_name: str):
+def local_mode(issue_file: str):
     issue_path = Path(issue_file).resolve()
     assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
 
@@ -39,13 +39,6 @@ def local_mode(issue_file: str, branch_name: str):
     with open(issue_path, "r") as f:
         issue_str = f.read()
 
-    # Check if branch exists
-    branches = exec_at("git branch --list", work_dir).split()
-    if branch_name in branches:
-        exec_at(f"git checkout {branch_name}", work_dir)
-    else:
-        exec_at(f"git checkout -b {branch_name}", work_dir)
-
     return work_dir, issue_str
 
 
@@ -58,16 +51,17 @@ def main():
     if not args.issue_file:
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
-    if not args.branch:
-        print("Error: Please provide the branch name using --branch option.")
-        sys.exit(1)
-
-    work_dir, issue_str = local_mode(args.issue_file, args.branch)
+    branch_name = args.branch if args.branch else None
+    work_dir, issue_str = local_mode(args.issue_file)
 
     @tool
-    def create_branch(branch_name: str) -> None:
+    def create_branch(branch_name: str):
         """Creates a new branch with the given name."""
-        exec_at(f"git checkout -b {branch_name}", work_dir)
+        branches = exec_at("git branch --list", work_dir).split()
+        if branch_name in branches:
+            exec_at(f"git checkout {branch_name}", work_dir)
+        else:
+            exec_at(f"git checkout -b {branch_name}", work_dir)
 
     @tool
     def list_files() -> str:
@@ -126,12 +120,15 @@ def main():
     query = f"""
 * 以下の課題を解決できるように、既存のソースコードを修正してください
 * 必要なファイルがなければ作成してください。
-* 修正したファイルは新しいブランチを作ってコミットしてください
+* 修正したファイルは指定のブランチにコミットしてください
 * 修正内容を要約して教えてください
 * 全て終わったらfinish()を呼び出してください
 
 ### 課題
 {issue_str}
+
+### 使用するブランチ名
+{branch_name if branch_name else "新規作成"}
 """
 
     llm_with_tools = llm.bind_tools(tools)
