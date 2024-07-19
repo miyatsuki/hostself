@@ -24,7 +24,7 @@ base_dir = Path(__file__).parent.resolve()
 llm = ChatOpenAI(model="gpt-4o", api_key=dotenv_values()["OPENAI_API_KEY"])
 
 
-def local_mode(issue_file: str):
+def local_mode(issue_file: str, branch_name: str):
     issue_path = Path(issue_file).resolve()
     assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
 
@@ -39,18 +39,30 @@ def local_mode(issue_file: str):
     with open(issue_path, "r") as f:
         issue_str = f.read()
 
+    # Check if branch exists
+    branches = exec_at("git branch --list", work_dir).split()
+    if branch_name in branches:
+        exec_at(f"git checkout {branch_name}", work_dir)
+    else:
+        exec_at(f"git checkout -b {branch_name}", work_dir)
+
     return work_dir, issue_str
 
 
 def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
     parser.add_argument("issue_file", help="Issue file path (for local mode)")
+    parser.add_argument("--branch", help="Branch name to use or create")
     args = parser.parse_args()
 
     if not args.issue_file:
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
-    work_dir, issue_str = local_mode(args.issue_file)
+    if not args.branch:
+        print("Error: Please provide the branch name using --branch option.")
+        sys.exit(1)
+
+    work_dir, issue_str = local_mode(args.issue_file, args.branch)
 
     @tool
     def create_branch(branch_name: str) -> None:
@@ -98,7 +110,7 @@ def main():
     @tool
     def finish() -> None:
         """Finishes the execution of the chain."""
-        pass
+        exec_at(f"github .", work_dir)
 
     tools = [
         create_branch,
