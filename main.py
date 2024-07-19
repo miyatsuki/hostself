@@ -51,7 +51,18 @@ def main():
     if not args.issue_file:
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
-    branch_name = args.branch if args.branch else None
+
+    # check current branch name
+    if args.branch:
+        new_branch_name = args.branch
+    else:
+        current_branch_name = exec_at("git rev-parse --abbrev-ref HEAD").strip()
+        new_branch_name = (
+            current_branch_name
+            if current_branch_name not in ["main", "master", "develop"]
+            else None
+        )
+
     work_dir, issue_str = local_mode(args.issue_file)
 
     @tool
@@ -128,7 +139,7 @@ def main():
 {issue_str}
 
 ### 使用するブランチ名
-{branch_name if branch_name else "新規作成"}
+{new_branch_name if new_branch_name else "新規作成"}
 """
 
     llm_with_tools = llm.bind_tools(tools)
