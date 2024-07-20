@@ -5,7 +5,7 @@ from pathlib import Path
 
 from dotenv import dotenv_values
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import FunctionMessage, HumanMessage, ToolMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from langchain_core.tools import tool
 
 
@@ -145,7 +145,7 @@ def main():
 """
 
     llm_with_tools = llm.bind_tools(tools)
-    messages: list[HumanMessage | FunctionMessage | ToolMessage] = [HumanMessage(query)]
+    messages: list[BaseMessage] = [HumanMessage(query)]
     ai_msg = llm_with_tools.invoke(messages)
 
     while True or len(messages) < 20:
