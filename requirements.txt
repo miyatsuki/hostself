@@ -1,4 +1,4 @@
 langchain
-langchain-openai
+langchain-anthropic
 openai
 python-dotenv
