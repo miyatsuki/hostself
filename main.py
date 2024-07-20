@@ -4,9 +4,9 @@ import sys
 from pathlib import Path
 
 from dotenv import dotenv_values
+from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import FunctionMessage, HumanMessage, ToolMessage
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
 
 
 def exec_at(cmd: str, work_dir: Path | None = None) -> str:
@@ -21,7 +21,9 @@ def exec_at(cmd: str, work_dir: Path | None = None) -> str:
 
 
 base_dir = Path(__file__).parent.resolve()
-llm = ChatOpenAI(model="gpt-4o", api_key=dotenv_values()["OPENAI_API_KEY"])
+llm = ChatAnthropic(
+    model="claude-3-5-sonnet-20240620", api_key=dotenv_values()["ANTHROPIC_API_KEY"]
+)
 
 
 def local_mode(issue_file: str):
