@@ -219,9 +219,7 @@ def main():
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
 
-    current_branch_name = json.loads(
-        exec_at("git rev-parse --abbrev-ref HEAD").stdout.strip()
-    )
+    current_branch_name = exec_at("git rev-parse --abbrev-ref HEAD").stdout
     branch_name = (
         None
         if current_branch_name in ["main", "master", "develop"]
