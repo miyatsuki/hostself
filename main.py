@@ -9,8 +9,9 @@ import marvin
 from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel
 
-load_dotenv()
-env = dotenv_values(".env")
+base_dir = Path(__file__).parent
+load_dotenv(base_dir / ".env")
+env = dotenv_values(base_dir / ".env")
 
 marvin.settings.openai.chat.completions.model = "gpt-4o"
 marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
