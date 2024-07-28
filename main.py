@@ -65,11 +65,18 @@ def list_files(work_dir: Path):
         Path(file) for file in folder_structure.strip().split("\n") if file.strip()
     ]
 
+    config = {}
+    config_path = work_dir / ".ai/config.toml"
+    if config_path.exists():
+        config = tomllib.loads(config_path.read_text())
+
+    ignore_list = config.get("ignore", [])
+
     ans: list[File] = []
     for path in path_list:
-        full_path = work_dir / path
-        with open(full_path, "r") as f:
-            ans.append(File(path=path, text=f.read()))
+        if str(path) not in ignore_list:
+            with open(work_dir / path, "r") as f:  # ここを修正
+                ans.append(File(path=path, text=f.read()))
 
     return ans
 
