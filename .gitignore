@@ -164,4 +164,4 @@ cython_debug/
 # User-specific files
 tmp
 tmp/
-.ai/
+issue/
