@@ -74,8 +74,11 @@ def list_files(work_dir: Path):
     ans: list[File] = []
     for path in path_list:
         if str(path) not in ignore_list:
-            with open(work_dir / path, "r") as f:  # ここを修正
-                ans.append(File(path=path, text=f.read()))
+            try:
+                with open(work_dir / path, "r") as f:  # ここを修正
+                    ans.append(File(path=path, text=f.read()))
+            except UnicodeDecodeError:
+                print(f"Error: Unable to read file {path}. Skipping.")
 
     return ans
 
