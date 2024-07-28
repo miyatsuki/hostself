@@ -67,7 +67,8 @@ def list_files(work_dir: Path):
 
     ans: list[File] = []
     for path in path_list:
-        with open(path, "r") as f:
+        full_path = work_dir / path
+        with open(full_path, "r") as f:
             ans.append(File(path=path, text=f.read()))
 
     return ans
