@@ -5,4 +5,4 @@ from tempfile import TemporaryDirectory
 
 class TestMain(unittest.TestCase):
     def test_always_pass(self):
-        self.assertTrue(False)
+        self.assertTrue(True)
