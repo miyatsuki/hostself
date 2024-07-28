@@ -207,7 +207,7 @@ def test(work_dir: Path, config: dict) -> str:
         for test_command in config["tests"]:
             ret = exec_at(test_command, work_dir)
             if ret.returncode != 0:
-                test_result += ret.stderr
+                test_result += test_command + "\n" + ret.stderr + "\n\n"
 
     return test_result
 
