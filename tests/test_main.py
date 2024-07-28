@@ -40,7 +40,7 @@ class TestMain(unittest.TestCase):
             for file in files:
                 self.assertIsInstance(file, File)
                 self.assertIn(file.path, [Path("file1.txt"), Path("file2.py"), Path("subdir/file3.md")])
-                self.assertEqual(file.text, file.path.read_text())
+                self.assertEqual(file.text, (work_dir / file.path).read_text())
 
 if __name__ == '__main__':
     unittest.main()
