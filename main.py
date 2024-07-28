@@ -12,8 +12,10 @@ from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel
 
 load_dotenv()
+env = dotenv_values(".env")
 
 marvin.settings.openai.chat.completions.model = "gpt-4o"
+marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
 antrhopic_client = anthropic.Anthropic()
 
 
