@@ -1,12 +1,11 @@
+import os
+import sys
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-import os
-import sys
 
-# Add the parent directory to sys.path to import main
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from main import list_files, File
+from main import File, list_files
+
 
 class TestMain(unittest.TestCase):
     def test_always_pass(self):
@@ -28,19 +27,25 @@ class TestMain(unittest.TestCase):
             file3.write_text("# Markdown file")
 
             # Initialize git repository
-            os.system(f"cd {work_dir} && git init && git add . && git commit -m 'Initial commit'")
+            os.system(
+                f"cd {work_dir} && git init && git add . && git commit -m 'Initial commit'"
+            )
 
             # Call list_files
             files = list_files(work_dir)
 
             # Check if all files are listed
             self.assertEqual(len(files), 3)
-            
+
             # Check if files are correctly represented
             for file in files:
                 self.assertIsInstance(file, File)
-                self.assertIn(file.path, [Path("file1.txt"), Path("file2.py"), Path("subdir/file3.md")])
-                self.assertEqual(file.text, file.path.read_text())
+                self.assertIn(
+                    file.path,
+                    [Path("file1.txt"), Path("file2.py"), Path("subdir/file3.md")],
+                )
+                self.assertEqual(file.text, (work_dir / file.path).read_text())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
