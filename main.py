@@ -34,24 +34,6 @@ def exec_at(cmd: str, work_dir: Path | None = None):
     return result
 
 
-def local_mode(issue_file: str):
-    issue_path = Path(issue_file).resolve()
-    assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
-
-    # Find git repository root
-    work_dir = issue_path.parent
-    while not (work_dir / ".git").exists():
-        work_dir = work_dir.parent
-        if work_dir == work_dir.parent:  # Reached root directory
-            print(f"Error: Git repository not found for {issue_file}")
-            sys.exit(1)
-
-    with open(issue_path, "r") as f:
-        issue_str = f.read()
-
-    return work_dir, issue_str
-
-
 def list_files(work_dir: Path):
     """Lists the files in the repository."""
     folder_structure = exec_at("git ls-files", work_dir).stdout
@@ -182,7 +164,20 @@ def main():
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
 
-    work_dir, issue_str = local_mode(args.issue_file)
+    issue_file = args.issue_file
+    issue_path = Path(issue_file).resolve()
+    assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
+
+    # Find git repository root
+    work_dir = issue_path.parent
+    while not (work_dir / ".git").exists():
+        work_dir = work_dir.parent
+        if work_dir == work_dir.parent:  # Reached root directory
+            print(f"Error: Git repository not found for {issue_file}")
+            sys.exit(1)
+
+    with open(issue_path, "r") as f:
+        issue_str = f.read()
 
     config = {}
     config_path = work_dir / ".ai/config.toml"
