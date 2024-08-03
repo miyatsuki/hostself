@@ -23,11 +23,6 @@ class File(BaseModel):
     text: str
 
 
-class Commit(BaseModel):
-    message: str
-    branch: str | None
-
-
 def exec_at(cmd: str, work_dir: Path | None = None):
     if work_dir is None:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
@@ -90,7 +85,7 @@ def fix_files(issue: str, codes: list[File]):
 #### 指示
 - 修正が必要な箇所を修正してください。
 - 修正したファイルはファイル全体を出力してください。省略は行わないでください。
-- 修正したファイルについては、そのファイルのパスを出力してください
+- 修正したファイルについては、そのファイルのパスを出力してください。
 - 修正が必要ないファイルについては返却しないでください。
 
 #### 要件
@@ -117,7 +112,7 @@ def fix_files(issue: str, codes: list[File]):
     files_str = r.content[0].text
     print(files_str)
 
-    return marvin.cast(data=files_str, target=list[File]), files_str
+    return marvin.cast(data=files_str, target=list[File])
 
 
 def merge_files(files: list[File], fixed_files: list[File]):
@@ -152,7 +147,7 @@ def merge_files(files: list[File], fixed_files: list[File]):
     files_str = r.content[0].text
     print(files_str)
 
-    return marvin.cast(data=files_str, target=list[File]) + fixed_only_files, files_str
+    return marvin.cast(data=files_str, target=list[File]) + fixed_only_files
 
 
 def write_files(work_dir: Path, files: list[File]):
@@ -164,61 +159,6 @@ def write_files(work_dir: Path, files: list[File]):
 
         with open(path, "w") as f:
             f.write(file.text)
-
-
-def stage_file(work_dir: Path, files: list[File]):
-    """Stages a file for commit."""
-    for file in files:
-        exec_at(f"git add {file.path}", work_dir)
-
-
-def checkout(work_dir: Path, branch_name: str | None):
-    """Creates a new branch with the given name."""
-    branches = exec_at("git branch --list", work_dir).stdout.split()
-    if branch_name in branches:
-        exec_at(f"git checkout {branch_name}", work_dir)
-    else:
-        exec_at(f"git checkout -b {branch_name}", work_dir)
-
-
-def commit_files(
-    work_dir: Path,
-    files: list[File],
-    issue_str: str,
-    merge_str: str,
-    branch_name: str | None,
-):
-    prompt = f"""
-以下のような修正を行います
-コミットメッセージとブランチ名を考えてください
-
-#### 修正時のコメント
-{issue_str}
-
-#### マージ時のコメント
-{merge_str}
-
-#### 修正後のコード
-{files}
-""".strip()
-
-    r = antrhopic_client.messages.create(
-        model="claude-3-5-sonnet-20240620",
-        max_tokens=4096,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    files_str = r.content[0].text
-    commit_msg = marvin.cast(data=files_str, target=Commit)
-
-    if branch_name is None:
-        checkout(work_dir, commit_msg.branch)
-    else:
-        checkout(work_dir, branch_name)
-
-    write_files(work_dir, files)
-    stage_file(work_dir, files)
-    exec_at(f'git commit -m "AI: {commit_msg.message}"', work_dir)
-    return commit_msg.branch
 
 
 def test(work_dir: Path, config: dict) -> str:
@@ -242,12 +182,6 @@ def main():
         print("Error: In local mode, please provide the issue file path.")
         sys.exit(1)
 
-    current_branch_name = exec_at("git rev-parse --abbrev-ref HEAD").stdout
-    branch_name = (
-        None
-        if current_branch_name in ["main", "master", "develop"]
-        else current_branch_name
-    )
     work_dir, issue_str = local_mode(args.issue_file)
 
     config = {}
@@ -260,15 +194,13 @@ def main():
         files = list_files(work_dir)
 
         ### fix file
-        fixed_files, fix_comments = fix_files(issue_str, files)
+        fixed_files = fix_files(issue_str, files)
 
         ### merge
-        merged_files, merge_comments = merge_files(files, fixed_files)
+        merged_files = merge_files(files, fixed_files)
 
-        ### commit
-        branch_name = commit_files(
-            work_dir, merged_files, fix_comments, merge_comments, branch_name
-        )
+        ### write
+        write_files(work_dir, merged_files)
 
         ### test
         test_result = test(work_dir, config)
