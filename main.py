@@ -41,6 +41,15 @@ def list_files(work_dir: Path):
         Path(file) for file in folder_structure.strip().split("\n") if file.strip()
     ]
 
+    # lock系のファイルは無視する
+    path_list = [path for path in path_list if "lock" not in path.name]
+
+    # ベクトル画像のファイルは無視する
+    path_list = [path for path in path_list if path.suffix not in [".svg"]]
+
+    # .gitignoreは無視する
+    path_list = [path for path in path_list if path.name != ".gitignore"]
+
     config = {}
     config_path = work_dir / ".ai/config.toml"
     if config_path.exists():
@@ -65,7 +74,7 @@ def fix_files(issue: str, codes: list[File]):
 入力に対して要件を満たすように修正を行います。
 
 #### 指示
-- 修正が必要な箇所を修正してください。
+- 必要な箇所を修正してください。ただし、できるだけ修正箇所を少なくしてください。
 - 修正したファイルはファイル全体を出力してください。省略は行わないでください。
 - 修正したファイルについては、そのファイルのパスを出力してください。
 - 修正が必要ないファイルについては返却しないでください。
@@ -157,27 +166,11 @@ def test(work_dir: Path, config: dict) -> str:
 
 def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
-    parser.add_argument("issue_file", help="Issue file path (for local mode)")
+    parser.add_argument("issue_str", help="Issue text (for local mode)")
     args = parser.parse_args()
 
-    if not args.issue_file:
-        print("Error: In local mode, please provide the issue file path.")
-        sys.exit(1)
-
-    issue_file = args.issue_file
-    issue_path = Path(issue_file).resolve()
-    assert issue_path.exists(), f"Error: Issue file {issue_path} not found."
-
-    # Find git repository root
-    work_dir = issue_path.parent
-    while not (work_dir / ".git").exists():
-        work_dir = work_dir.parent
-        if work_dir == work_dir.parent:  # Reached root directory
-            print(f"Error: Git repository not found for {issue_file}")
-            sys.exit(1)
-
-    with open(issue_path, "r") as f:
-        issue_str = f.read()
+    work_dir = Path(".")
+    issue_str = args.issue_str
 
     config = {}
     config_path = work_dir / ".ai/config.toml"
@@ -187,6 +180,7 @@ def main():
     while True:
         ### open file
         files = list_files(work_dir)
+        print([f.path for f in files])
 
         ### fix file
         fixed_files = fix_files(issue_str, files)
