@@ -1,6 +1,5 @@
 import argparse
 import subprocess
-import sys
 import tomllib
 from pathlib import Path
 
@@ -72,6 +71,8 @@ def list_files(work_dir: Path):
 def fix_files(issue: str, codes: list[File]):
     prompt = f"""
 入力に対して要件を満たすように修正を行います。
+修正はステップバイステップで行います。どのような修正が良いかを考えてステップごとに発言してください。
+最終的に修正したファイルのパスと修正後のコードを出力してください。
 
 #### 指示
 - 必要な箇所を修正してください。ただし、できるだけ修正箇所を少なくしてください。
@@ -85,14 +86,9 @@ def fix_files(issue: str, codes: list[File]):
 #### コード
 {codes}
 
-#### 出力フォーマット
-```ファイルのパス
-修正後のコード
-```
-
-```ファイルのパス
-修正後のコード
-```
+#### 出力が必要なもの
+- 修正後のコード
+- 修正したファイルのパス
 """.strip()
 
     r = antrhopic_client.messages.create(
@@ -116,11 +112,13 @@ def merge_files(files: list[File], fixed_files: list[File]):
 
     prompt = f"""
 入力に対して要件を満たすように修正を行います。
+修正はステップバイステップで行い、最終的に修正後のコードを出力してください。
 
 #### 指示
 - 修正後と修正前のファイルをマージしてください。
 - 修正したファイルのパスとマージ後のコードを出力してください。
-- 修正後がコード全体でない場合、修正前の内容と辻褄を合わせてマージしてください
+- 修正前のファイルが存在しない場合、新規作成なので修正後のファイルをそのまま出力してください。
+- 修正後のコードは省略されている場合があります。その箇所は修正前のコードを採用してください。
 - conflictが発生した場合は、修正後の内容を採用してください。
 
 #### 修正前のコード
@@ -128,6 +126,19 @@ def merge_files(files: list[File], fixed_files: list[File]):
 
 #### 修正後のコード
 {common_files_after}
+
+#### 出力フォーマット
+```json
+{{
+    "explanation": "修正の理由",
+    "files": [
+        {{
+            "path": "ファイルのパス",
+            "text": "マージ後のコード"
+        }}
+    ]
+}}
+```
 """.strip()
 
     r = antrhopic_client.messages.create(
