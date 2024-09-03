@@ -5,6 +5,7 @@ from pathlib import Path
 
 import anthropic
 import marvin
+import openai
 from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel
 
@@ -12,9 +13,10 @@ base_dir = Path(__file__).parent
 load_dotenv(base_dir / ".env")
 env = dotenv_values(base_dir / ".env")
 
-marvin.settings.openai.chat.completions.model = "gpt-4o"
+marvin.settings.openai.chat.completions.model = "gpt-4o-2024-08-06"
 marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
 antrhopic_client = anthropic.Anthropic()
+openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
 
 
 class File(BaseModel):
@@ -68,7 +70,7 @@ def list_files(work_dir: Path):
     return ans
 
 
-def fix_files(issue: str, codes: list[File]):
+def fix_files_claude(issue: str, codes: list[File]):
     prompt = f"""
 入力に対して要件を満たすように修正を行います。
 修正はステップバイステップで行います。どのような修正が良いかを考えてステップごとに発言してください。
@@ -97,6 +99,83 @@ def fix_files(issue: str, codes: list[File]):
         messages=[{"role": "user", "content": prompt}],
     )
     files_str = r.content[0].text
+    print(files_str)
+
+    return files_str
+
+
+def fix_files_openai(issue: str, codes: list[File]):
+    prompt = f"""
+入力に対して要件を満たすように修正を行います。
+修正はステップバイステップで行います。どのような修正が良いかを考えてステップごとに発言してください。
+最終的に修正したファイルのパスと修正後のコードを出力してください。
+
+#### 指示
+- 必要な箇所を修正してください。ただし、できるだけ修正箇所を少なくしてください。
+- 修正したファイルはファイル全体を出力してください。省略は行わないでください。
+- 修正したファイルについては、そのファイルのパスを出力してください。
+- 修正が必要ないファイルについては返却しないでください。
+
+#### 要件
+{issue}
+
+#### コード
+{codes}
+
+#### 出力が必要なもの
+- 修正後のコード
+- 修正したファイルのパス
+""".strip()
+
+    r = openai_client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        max_tokens=16384,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    files_str = r.choices[0].message.content
+    assert files_str
+    print(files_str)
+
+    return files_str
+
+
+def fix_files_merge(issue: str, codes: list[File], fix1: str, fix2: str):
+    prompt = f"""
+入力に対して要件を満たすように修正を行います。
+修正案1と修正案2をマージして最終的な修正案を出力してください。
+修正はステップバイステップで行います。どのような修正が良いかを考えてステップごとに発言してください。
+最終的に修正したファイルのパスと修正後のコードを出力してください。
+
+#### 指示
+- 必要な箇所を修正してください。ただし、できるだけ修正箇所を少なくしてください。
+- 修正したファイルはファイル全体を出力してください。省略は行わないでください。
+- 修正したファイルについては、そのファイルのパスを出力してください。
+- 修正が必要ないファイルについては返却しないでください。
+
+#### 要件
+{issue}
+
+#### コード
+{codes}
+
+#### 修正案1
+{fix1}
+
+#### 修正案2
+{fix2}
+
+#### 出力が必要なもの
+- 修正後のコード
+- 修正したファイルのパス
+""".strip()
+
+    r = openai_client.chat.completions.create(
+        model="gpt-4o-2024-08-06",
+        max_tokens=16384,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    files_str = r.choices[0].message.content
+    assert files_str
     print(files_str)
 
     return marvin.cast(data=files_str, target=list[File])
@@ -194,7 +273,11 @@ def main():
         print([f.path for f in files])
 
         ### fix file
-        fixed_files = fix_files(issue_str, files)
+        fixed_files_str_claude = fix_files_claude(issue_str, files)
+        fixed_files_str_openai = fix_files_openai(issue_str, files)
+        fixed_files = fix_files_merge(
+            issue_str, files, fixed_files_str_claude, fixed_files_str_openai
+        )
 
         ### merge
         merged_files = merge_files(files, fixed_files)
