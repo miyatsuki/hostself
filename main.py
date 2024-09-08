@@ -95,7 +95,7 @@ def fix_files_claude(issue: str, codes: list[File]):
 
     r = antrhopic_client.messages.create(
         model="claude-3-5-sonnet-20240620",
-        max_tokens=4096,
+        max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
     files_str = r.content[0].text
