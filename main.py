@@ -13,12 +13,14 @@ base_dir = Path(__file__).parent
 load_dotenv(base_dir / ".env")
 env = dotenv_values(base_dir / ".env")
 
-marvin.settings.openai.chat.completions.model = "gpt-4o-2024-08-06"
+CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
+OPENAI_COMPLETION_MODEL = "gpt-4o-2024-11-20"
+OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-08-06"
+
+marvin.settings.openai.chat.completions.model = OPENAI_STRUCTURED_OUTPUT_MODEL
 marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
 antrhopic_client = anthropic.Anthropic()
 openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
-
-CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
 
 
 class File(BaseModel):
@@ -130,7 +132,7 @@ def fix_files_openai(issue: str, codes: list[File]):
 """.strip()
 
     r = openai_client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
+        model=OPENAI_COMPLETION_MODEL,
         max_tokens=16384,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -172,7 +174,7 @@ def fix_files_merge(issue: str, codes: list[File], fix1: str, fix2: str):
 """.strip()
 
     r = openai_client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
+        model=OPENAI_COMPLETION_MODEL,
         max_tokens=16384,
         messages=[{"role": "user", "content": prompt}],
     )
