@@ -18,6 +18,8 @@ marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
 antrhopic_client = anthropic.Anthropic()
 openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
 
+CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
+
 
 class File(BaseModel):
     path: Path
@@ -94,7 +96,7 @@ def fix_files_claude(issue: str, codes: list[File]):
 """.strip()
 
     r = antrhopic_client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model=CLAUDE_MODEL,
         max_tokens=8192,
         messages=[{"role": "user", "content": prompt}],
     )
@@ -221,7 +223,7 @@ def merge_files(files: list[File], fixed_files: list[File]):
 """.strip()
 
     r = antrhopic_client.messages.create(
-        model="claude-3-5-sonnet-20240620",
+        model=CLAUDE_MODEL,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
