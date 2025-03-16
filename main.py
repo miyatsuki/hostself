@@ -4,7 +4,6 @@ import tomllib
 from pathlib import Path
 
 import anthropic
-import marvin
 import openai
 from dotenv import dotenv_values, load_dotenv
 from pydantic import BaseModel
@@ -15,10 +14,8 @@ env = dotenv_values(base_dir / ".env")
 
 CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
 OPENAI_COMPLETION_MODEL = "gpt-4o-2024-11-20"
-OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-08-06"
+OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-11-20"
 
-marvin.settings.openai.chat.completions.model = OPENAI_STRUCTURED_OUTPUT_MODEL
-marvin.settings.openai.api_key = env["OPENAI_API_KEY"]
 antrhopic_client = anthropic.Anthropic()
 openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
 
@@ -182,7 +179,20 @@ def fix_files_merge(issue: str, codes: list[File], fix1: str, fix2: str):
     assert files_str
     print(files_str)
 
-    return marvin.cast(data=files_str, target=list[File])
+    r = openai_client.beta.chat.completions.parse(
+        model=OPENAI_STRUCTURED_OUTPUT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": "以下の入力を指定のフォーマットに変換してください。\n"
+                + files_str,
+            }
+        ],
+        response_format=list[File],
+    )
+
+    assert r.choices[0].message.parsed
+    return r.choices[0].message.parsed
 
 
 def merge_files(files: list[File], fixed_files: list[File]):
@@ -232,7 +242,20 @@ def merge_files(files: list[File], fixed_files: list[File]):
     files_str = r.content[0].text
     print(files_str)
 
-    return marvin.cast(data=files_str, target=list[File]) + fixed_only_files
+    r = openai_client.beta.chat.completions.parse(
+        model=OPENAI_STRUCTURED_OUTPUT_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": "以下の入力を指定のフォーマットに変換してください。\n"
+                + files_str,
+            }
+        ],
+        response_format=list[File],
+    )
+
+    assert r.choices[0].message.parsed
+    return r.choices[0].message.parsed + fixed_only_files
 
 
 def write_files(work_dir: Path, files: list[File]):
