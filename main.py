@@ -16,7 +16,7 @@ CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
 OPENAI_COMPLETION_MODEL = "gpt-4o-2024-11-20"
 OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-11-20"
 
-antrhopic_client = anthropic.Anthropic()
+anthropic_client = anthropic.Anthropic()
 openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
 
 
@@ -94,9 +94,9 @@ def fix_files_claude(issue: str, codes: list[File]):
 - 修正したファイルのパス
 """.strip()
 
-    r = antrhopic_client.messages.create(
+    r = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=8192,
+        max_tokens=200 * 1000,
         messages=[{"role": "user", "content": prompt}],
     )
     files_str = r.content[0].text
@@ -129,9 +129,7 @@ def fix_files_openai(issue: str, codes: list[File]):
 """.strip()
 
     r = openai_client.chat.completions.create(
-        model=OPENAI_COMPLETION_MODEL,
-        max_tokens=16384,
-        messages=[{"role": "user", "content": prompt}],
+        model=OPENAI_COMPLETION_MODEL, messages=[{"role": "user", "content": prompt}]
     )
     files_str = r.choices[0].message.content
     assert files_str
@@ -171,9 +169,7 @@ def fix_files_merge(issue: str, codes: list[File], fix1: str, fix2: str):
 """.strip()
 
     r = openai_client.chat.completions.create(
-        model=OPENAI_COMPLETION_MODEL,
-        max_tokens=16384,
-        messages=[{"role": "user", "content": prompt}],
+        model=OPENAI_COMPLETION_MODEL, messages=[{"role": "user", "content": prompt}]
     )
     files_str = r.choices[0].message.content
     assert files_str
@@ -234,9 +230,9 @@ def merge_files(files: list[File], fixed_files: list[File]):
 ```
 """.strip()
 
-    r = antrhopic_client.messages.create(
+    r = anthropic_client.messages.create(
         model=CLAUDE_MODEL,
-        max_tokens=4096,
+        max_tokens=200 * 1000,
         messages=[{"role": "user", "content": prompt}],
     )
     files_str = r.content[0].text
