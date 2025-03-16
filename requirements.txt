@@ -1,5 +1,4 @@
 anthropic==0.49.0
-marvin==3.0.1
 openai==1.66.3
 python-dotenv==1.0.1
 pydantic==2.10.6
