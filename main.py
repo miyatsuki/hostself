@@ -1,6 +1,8 @@
 import argparse
+import os
 import subprocess
 import tomllib
+from datetime import datetime
 from pathlib import Path
 
 import anthropic
@@ -13,11 +15,16 @@ load_dotenv(base_dir / ".env")
 env = dotenv_values(base_dir / ".env")
 
 CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
+DEEPSEEK_MODEL = "deepseek-3-7-sonnet-20250219"
 OPENAI_COMPLETION_MODEL = "gpt-4o-2024-11-20"
 OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-11-20"
 
 anthropic_client = anthropic.Anthropic()
-openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
+
+# openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
+openai_client = openai.Client(
+    api_key=os.environ["DEEPSEEK_API_KEY"], base_url="https://api.deepseek.com"
+)
 
 
 class File(BaseModel):
@@ -32,6 +39,35 @@ def exec_at(cmd: str, work_dir: Path | None = None):
         result = subprocess.run(
             f"cd {work_dir} && {cmd}", shell=True, capture_output=True, text=True
         )
+
+    return result
+
+
+def exec_in_docker(cmd: str, container_name: str, log_dir: Path | None = None):
+    """Dockerコンテナ内でコマンドを実行し、結果をログファイルに保存する"""
+    result = subprocess.run(
+        ["docker", "exec", container_name, "bash", "-c", cmd],
+        capture_output=True,
+        text=True,
+    )
+
+    # ログ出力ディレクトリが指定されている場合、ログを保存
+    if log_dir is not None:
+        if not log_dir.exists():
+            log_dir.mkdir(parents=True, exist_ok=True)
+
+        log_file = log_dir / f"docker_exec_{container_name}.log"
+
+        with open(log_file, "a") as f:
+            f.write("===== COMMAND EXECUTION =====\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            f.write(f"Command: {cmd}\n")
+            f.write(f"Exit code: {result.returncode}\n")
+            f.write("===== STDOUT =====\n")
+            f.write(result.stdout)
+            f.write("\n===== STDERR =====\n")
+            f.write(result.stderr)
+            f.write("\n\n")
 
     return result
 
@@ -280,44 +316,67 @@ def test(work_dir: Path, config: dict) -> str:
 def main():
     parser = argparse.ArgumentParser(description="AI-assisted code modification tool")
     parser.add_argument("issue_str", help="Issue text (for local mode)")
+    parser.add_argument(
+        "--log-dir", help="Directory to store Docker execution logs", default="logs"
+    )
     args = parser.parse_args()
 
     work_dir = Path(".")
     issue_str = args.issue_str
+    log_dir = Path(args.log_dir)
 
     config = {}
     config_path = work_dir / ".ai/config.toml"
     if config_path.exists():
         config = tomllib.loads(config_path.read_text())
 
-    while True:
-        ### open file
-        files = list_files(work_dir)
-        print([f.path for f in files])
+    # ユニークなコンテナ名を生成
+    import uuid
 
-        ### fix file
-        fixed_files_str_claude = fix_files_claude(issue_str, files)
-        fixed_files_str_openai = fix_files_openai(issue_str, files)
-        fixed_files = fix_files_merge(
-            issue_str, files, fixed_files_str_claude, fixed_files_str_openai
+    container_name = f"hostself-container-{uuid.uuid4().hex[:8]}"
+
+    try:
+        # コンテナを作成して起動する（1コマンドで実行）
+        # --rmオプションを追加してコンテナ終了時に自動削除するようにする
+        # .envファイルの内容を環境変数として渡す
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",  # コンテナ終了時に自動削除
+                "--env-file",
+                str(base_dir / ".env"),  # .envファイルの内容を環境変数として渡す
+                "--name",
+                container_name,
+                "hostself",  # イメージ名
+                "python",
+                "container.py",
+                issue_str,
+            ],
+            check=True,
         )
 
-        ### merge
-        merged_files = merge_files(files, fixed_files)
+        # # 起動したコンテナ内でコマンドを実行
+        # exec_in_docker(
+        #     f"git clone http://host.docker.internal:3000/miyatsuki/buggy-sandbox.git",
+        #     container_name,
+        #     log_dir,
+        # )
 
-        ### write
-        write_files(work_dir, merged_files)
+        # # 起動したコンテナ内でコマンドを実行し、ログを保存
+        # exec_in_docker("ls", container_name, log_dir)
 
-        ### test
-        test_result = test(work_dir, config)
-
-        ### if fail continue
-        if test_result:
-            print(f"Test failed: {test_result}")
-            issue_str = f"以下のテストが失敗しました。修正してください: {test_result}"
-        else:
-            print("Test passed.")
-            break
+        # # コンテナを停止する（自動削除されるので、docker rmは不要）
+        # subprocess.run(["docker", "stop", container_name], check=True)
+        # print(f"コンテナを停止しました: {container_name}")
+    except subprocess.CalledProcessError as e:
+        print(f"エラーが発生しました: {e}")
+        subprocess.run(["docker", "rm", "-f", container_name], check=True)
+        # エラー時にもコンテナを確実に削除する
+        try:
+            subprocess.run(["docker", "rm", "-f", container_name], check=False)
+        except:
+            pass
 
 
 if __name__ == "__main__":
