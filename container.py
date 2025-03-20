@@ -222,8 +222,6 @@ def create_pull_request(
         case _:
             raise ValueError(f"Unknown repository type {repository_type}")
 
-    return pr_text
-
 
 messages = [
     {"role": "system", "content": "You are a helpful assistant."},
