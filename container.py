@@ -178,9 +178,6 @@ def fetch_issue(
         case _:
             raise ValueError(f"Unknown repository type {repository_type}")
 
-    return issue_text
-
-
 def create_pull_request(
     repository_type: Literal["github", "forgejo"],
     origin: str,
