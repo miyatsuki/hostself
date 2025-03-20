@@ -68,7 +68,7 @@ tools = [
         "type": "function",
         "function": {
             "name": "execute_command",
-            "description": """"
+            "description": """
 execute a command in a shell.
 * Don't do sudo, since it will be executed inside docker container.
 * Don't use cd, since it will be executed in a new shell.
