@@ -24,7 +24,7 @@ class TestMain(unittest.TestCase):
         command = "invalid_command"
         replace_dict = {}
         result = execute_command(command, replace_dict)
-        self.assertIn("command not found", result)
+        self.assertRegex(result, r"(command not found|invalid_command: not found)")
 
     def test_execute_command_with_nonexistent_directory(self):
         command = "echo Hello"
