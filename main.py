@@ -3,16 +3,11 @@ import subprocess
 import uuid
 from pathlib import Path
 
-from dotenv import dotenv_values, load_dotenv
+from dotenv import dotenv_values
 
 base_dir = Path(__file__).parent
-load_dotenv(base_dir / ".env")
 env = dotenv_values(base_dir / ".env")
-
-CLAUDE_MODEL = "claude-3-7-sonnet-20250219"
-DEEPSEEK_MODEL = "deepseek-3-7-sonnet-20250219"
-OPENAI_COMPLETION_MODEL = "gpt-4o-2024-11-20"
-OPENAI_STRUCTURED_OUTPUT_MODEL = "gpt-4o-2024-11-20"
+LOCAL_HOST_ALIAS = env["LOCAL_HOST_ALIAS"]
 
 
 def main():
@@ -29,6 +24,20 @@ def main():
     container_name = f"hostself-container-{uuid.uuid4().hex[:8]}"
 
     try:
+        subprocess.run(
+            [
+                "docker",
+                "build",
+                "-t",
+                "hostself",
+                str(base_dir),
+                "--build-arg",
+                f"GIT_USER_EMAIL={env['GIT_USER_EMAIL']}",
+                "--build-arg",
+                f"GIT_USER_NAME={env['GIT_USER_NAME']}",
+            ]
+        )
+
         # コンテナを作成して起動する（1コマンドで実行）
         # --rmオプションを追加してコンテナ終了時に自動削除するようにする
         # .envファイルの内容を環境変数として渡す
@@ -41,6 +50,8 @@ def main():
                 str(base_dir / ".env"),  # .envファイルの内容を環境変数として渡す
                 "--name",
                 container_name,
+                "--add-host",
+                f"{LOCAL_HOST_ALIAS}:host-gateway",
                 "hostself",  # イメージ名
                 "python",
                 "container.py",
