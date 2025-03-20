@@ -71,7 +71,7 @@ tools = [
             "description": """
 execute a command in a shell.
 * Don't do sudo, since it will be executed inside docker container.
-* Don't use cd, since it will be executed in a new shell.
+* use cwd parameter instead of cd command, since it will be executed in a new shell.
 * ${GH_TOKEN}, ${FORGEJO_TOKEN}, ${GITLAB_TOKEN} will be replaced with the actual token.
     * they are corresponding to GitHub, ForgeJo, and GitLab tokens.
     * so, when you want to push to GitHub, you can use https url with ${GH_TOKEN}
@@ -82,6 +82,10 @@ execute a command in a shell.
                     "command": {
                         "type": "string",
                         "description": "the command to execute",
+                    },
+                    "cwd": {
+                        "type": "string",
+                        "description": "the working directory",
                     },
                 },
                 "required": ["command"],
@@ -136,16 +140,27 @@ execute a command in a shell.
 ]
 
 
-def execute_command(command: str, replace_dict: dict[str, str] | None = None):
-    if replace_dict is not None:
-        for key, value in replace_dict.items():
-            command = command.replace(f"${{{key}}}", value)
+def execute_command(command: str, replace_dict: dict[str, str], cwd: str | None = None):
+    for key, value in replace_dict.items():
+        command = command.replace(f"${{{key}}}", value)
 
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    try:
+        if cwd:
+            result = subprocess.run(
+                command, shell=True, capture_output=True, text=True, cwd=cwd
+            )
+        else:
+            result = subprocess.run(command, shell=True, capture_output=True, text=True)
 
-    # 標準出力と標準エラーを結合して返す
-    output = result.stdout + "\n" + result.stderr
-    return output
+        # 標準出力と標準エラーを結合して返す
+        output = result.stdout + "\n" + result.stderr
+        return output
+    except subprocess.CalledProcessError as e:
+        return f"Error executing command:\n{e}"
+    except FileNotFoundError as e:
+        return f"Working Directory {cwd} does not exist:\n{e}"
+    except Exception as e:
+        return f"Error executing command:\n{e}"
 
 
 def fetch_issue(
@@ -282,6 +297,7 @@ while True:
                             "GH_TOKEN": os.environ["GH_TOKEN"],
                             "FORGEJO_TOKEN": os.environ["FORGEJO_TOKEN"],
                         },
+                        arguments.get("cwd"),
                     )
                 case "create_pull_request":
                     arguments = json.loads(tool.function.arguments)
