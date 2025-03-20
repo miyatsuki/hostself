@@ -7,7 +7,7 @@ from typing import Literal
 
 import anthropic
 import openai
-from pydantic import BaseModel
+import requests
 
 base_dir = Path(__file__).parent
 
@@ -160,9 +160,21 @@ def fetch_issue(
             raise NotImplementedError("GitHub is not implemented yet")
         case "forgejo":
             FORGEJO_PAT = os.environ["FORGEJO_TOKEN"]
-            issue_text = execute_command(
-                f"curl -X GET -H 'Authorization: token {FORGEJO_PAT}' {origin}/api/v1/repos/{repository_name}/issues/{issue_id}"
-            )
+
+            # リクエストヘッダーの設定
+            headers = {"Authorization": f"token {FORGEJO_PAT}"}
+
+            # APIエンドポイントURL
+            url = f"{origin}/api/v1/repos/{repository_name}/issues/{issue_id}"
+
+            # GETリクエストを送信
+            response = requests.get(url, headers=headers)
+
+            # レスポンスをチェック
+            if response.status_code == 200:
+                return response.text
+            else:
+                return f"Error fetching issue: {response.status_code} - {response.text}"
         case _:
             raise ValueError(f"Unknown repository type {repository_type}")
 
@@ -184,24 +196,32 @@ def create_pull_request(
             raise NotImplementedError("GitHub is not implemented yet")
         case "forgejo":
             FORGEJO_PAT = os.environ["FORGEJO_TOKEN"]
+
+            # リクエストヘッダーの設定
+            headers = {
+                "Authorization": f"token {FORGEJO_PAT}",
+                "Content-Type": "application/json",
+            }
+
+            # リクエストボディの設定
             payload = {
                 "base": "main",
                 "head": f"{FORGEJO_USER_NAME}:{branch_name}",
                 "title": title,
-                "body": body
+                "body": body,
             }
-            command = f"""
-curl -X POST -H "Authorization: token {FORGEJO_PAT}" \
-     -H "Content-Type: application/json" \
-     "{origin}/api/v1/repos/{repository_name}/pulls" \
-     -d '{{
-       "base": "main",
-       "head": f"{FORGEJO_USER_NAME}:{branch_name}",
-       "title": "{title}",
-       "body": "{body}"
-     }}'
-"""
-            pr_text = execute_command(command)
+
+            # APIエンドポイントURL
+            url = f"{origin}/api/v1/repos/{repository_name}/pulls"
+
+            # POSTリクエストを送信
+            response = requests.post(url, headers=headers, json=payload)
+
+            # レスポンスをチェック
+            if response.status_code >= 200 and response.status_code < 300:
+                return response.text
+            else:
+                return f"Error creating PR: {response.status_code} - {response.text}"
         case _:
             raise ValueError(f"Unknown repository type {repository_type}")
 
