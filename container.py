@@ -184,6 +184,12 @@ def create_pull_request(
             raise NotImplementedError("GitHub is not implemented yet")
         case "forgejo":
             FORGEJO_PAT = os.environ["FORGEJO_TOKEN"]
+            payload = {
+                "base": "main",
+                "head": f"{FORGEJO_USER_NAME}:{branch_name}",
+                "title": title,
+                "body": body
+            }
             command = f"""
 curl -X POST -H "Authorization: token {FORGEJO_PAT}" \
      -H "Content-Type: application/json" \
