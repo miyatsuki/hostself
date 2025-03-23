@@ -5,20 +5,18 @@ import subprocess
 from pathlib import Path
 from typing import Literal
 
-import anthropic
 import openai
 import requests
 
 base_dir = Path(__file__).parent
 
-# DEEPSEEK_MODEL = "deepseek-chat"
 OPENAI_MODEL = "gpt-4o-2024-11-20"
-
-anthropic_client = anthropic.Anthropic()
+# DEEPSEEK_MODEL = "deepseek-reasoning"
 
 # openai_client = openai.Client(api_key=env["OPENAI_API_KEY"])
 openai_client = openai.Client(
-    api_key=os.getenv("OPENAI_API_KEY", ""),  # base_url="https://api.deepseek.com"
+    api_key=os.getenv("OPENAI_API_KEY", ""),
+    # base_url="https://api.deepseek.com"
 )
 
 
@@ -74,6 +72,38 @@ def fetch_issue(
                 return f"Error fetching issue: {response.status_code} - {response.text}"
         case _:
             raise ValueError(f"Unknown repository type {repository_type}")
+
+
+def patch_file(file_path: str, patch: str):
+    """
+    ファイルをパッチする
+    params:
+        file_path: パッチを適用するファイルのパス
+        patch: 適用するパッチ。unified diff形式
+    returns:
+        適用後のファイルの内容
+    """
+
+    # パッチを適用する
+    try:
+        result = subprocess.run(
+            f"patch {file_path}",
+            input=patch,
+            shell=True,
+            capture_output=True,
+            text=True,
+        )
+
+        # 標準出力と標準エラーを結合して返す
+        output = result.stdout + "\n" + result.stderr
+        return output
+    except subprocess.CalledProcessError as e:
+        return f"Error patching file:\n{e}"
+    except FileNotFoundError as e:
+        return f"File {file_path} does not exist:\n{e}"
+    except Exception as e:
+        return f"Error patching file:\n{e}"
+
 
 def create_pull_request(
     repository_type: Literal["github", "forgejo"],
@@ -167,6 +197,27 @@ if __name__ == "__main__":
         {
             "type": "function",
             "function": {
+                "name": "patch_file",
+                "description": "patch the file with the given unified diff patch. returns the patched file content",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "file_path": {
+                            "type": "string",
+                            "description": "the path to the file to patch",
+                        },
+                        "patch": {
+                            "type": "string",
+                            "description": "the patch to apply. unified diff format",
+                        },
+                    },
+                    "required": ["file_path", "patch"],
+                },
+            },
+        },
+        {
+            "type": "function",
+            "function": {
                 "name": "execute_command",
                 "description": """
 execute a command in a shell.
@@ -244,19 +295,22 @@ execute a command in a shell.
         {
             "role": "user",
             "content": f"""
-    以下の指示を遂行してください。
-    遂行にあたっては現在の状態と指示の内容をまず確認し、その差分を埋めるように順番に作業してください。
-    作業が終わったら、本当に作業が終わっているかを確認してください。
-    本当に終わってたら終了の通知を出してください
+以下の指示を遂行してください。
+遂行にあたっては現在の状態と指示の内容をまず確認し、その差分を埋めるように順番に作業してください。
+作業が終わったら、本当に作業が終わっているかを確認してください。作業が終わっているかの確認とは最低でも以下の2点が担保されていることを指します。状況に応じて他に確認すべきことがあればそれも併せて実行してください。
+    * 改めて指示文の内容を読んで、現在の状態と指示の内容の間の差分がないか振り返ること
+    * 修正の量が最小限であるかを見直すこと
+    * unittestがある場合はそれを実行して全てパスすること
+本当に終わってたら終了の通知を出してください
 
-    * 全てのコマンドはdocker上で動いているpythonのsubprocess.run()で実行されます。そのため、cdは使わないでください
-    * urlが与えられた場合はまずそのurlを開いてください
-    * issueに対応するためのブランチが必要な場合、新しく作ってください
-    * コミットする際は[AI]というプレフィックスをつけ、その後にconventional commitの形式でコミットメッセージを書いてください
-        * 例: [AI] feat: add new feature
+* 全てのコマンドはdocker上で動いているpythonのsubprocess.run()で実行されます。そのため、cdは使わないでください
+* urlが与えられた場合はまずそのurlを開いてください
+* issueに対応するためのブランチが必要な場合、新しく作ってください
+* コミットする際は[AI]というプレフィックスをつけ、その後にconventional commitの形式でコミットメッセージを書いてください
+    * 例: [AI] feat: add new feature
 
-    #### 指示
-    {issue_str}
+#### 指示
+{issue_str}
     """,
         },
     ]
@@ -289,6 +343,12 @@ execute a command in a shell.
                             arguments["origin"],
                             arguments["repository_name"],
                             arguments["issue_id"],
+                        )
+                    case "patch_file":
+                        arguments = json.loads(tool.function.arguments)
+                        content = patch_file(
+                            arguments["file_path"],
+                            arguments["patch"],
                         )
                     case "execute_command":
                         arguments = json.loads(tool.function.arguments)
