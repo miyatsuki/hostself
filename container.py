@@ -151,7 +151,6 @@ def create_pull_request(
 
 
 if __name__ == "__main__":
-
     argparser = argparse.ArgumentParser()
     argparser.add_argument("issue_str", type=str)
     args = argparser.parse_args()
