@@ -1,1 +1,0 @@
-tests = ["./env/bin/python -m unittest discover tests/"]
