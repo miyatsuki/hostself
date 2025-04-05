@@ -1,13 +1,12 @@
-import os
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env.example")
-
 from container import fetch_issue
+
+load_dotenv(Path(__file__).parent.parent / ".env.example")
 
 
 class TestFetchIssue(unittest.TestCase):

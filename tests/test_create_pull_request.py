@@ -1,13 +1,12 @@
-import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env.example")
-
 from container import create_pull_request
+
+load_dotenv(Path(__file__).parent.parent / ".env.example")
 
 
 class TestCreatePullRequest(unittest.TestCase):
