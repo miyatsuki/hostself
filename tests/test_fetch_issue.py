@@ -1,5 +1,10 @@
 import unittest
 from unittest.mock import Mock, patch
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env.example")
 
 from container import fetch_issue
 
