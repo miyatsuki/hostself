@@ -24,7 +24,7 @@ class TestFetchIssue(unittest.TestCase):
                 issue_id="9",
             )
 
-            self.assertEqual(result, '{"id":9,"title":"Example Issue"}')
+            self.assertEqual(json.loads(result), {"id": 9, "title": "Example Issue"})
 
     def test_fetch_issue_forgejo_failure(self):
         with patch("container.requests.get") as mock_get:
